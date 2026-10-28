@@ -100,8 +100,9 @@ Only an explicit instruction starts this. In each repository being released:
    `[<version>]: compare/v<previous>...v<version>` — or
    `releases/tag/v<version>` when there is no earlier tag to compare against.
 4. Commit the promotion on its own as `release: v<version>`, in every
-   repository, and tag that commit with an annotated tag:
-   `git tag -a v<version> -m "<the release title>"`.
+   repository. Do not create the tag: ask the user to tag that commit
+   `v<version>` in GitHub Desktop. Desktop pushes only tags created in it, so
+   one made with `git tag`, lightweight or annotated, stays local.
 5. Give the user the GitHub release text to paste, both title and body, in
    English and in Chinese. The title is
    `Workavera v<version> — <short summary>` (`Workavera Sandbox v<version> —
