@@ -142,35 +142,44 @@ These bulk actions run in the background; failures are only logged and never blo
 
 ## 7. Sandbox image
 
-### Contents
+### Repository
 
-The image is defined in `sandbox/Dockerfile` in the repository, after vercel/eve's sandbox base image:
+The image is defined, tested, and published in its own repository, [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox), as `ghcr.io/xusenlin/workavera-sandbox:<version>`, after vercel/eve's sandbox base image. Like the server, Android, and iOS repositories, it carries its own `VERSION`, `CHANGELOG.md`, and tags, and is released by the process in `AGENTS.md`.
+
+That repository's README lists what Workavera relies on in the image (the user and directories below, and the installed tools). Changing any of it needs a matching change in Workavera, released together with the new tag.
+
+### Contents
 
 | Kind | Contents |
 | --- | --- |
-| Base | Ubuntu 26.04 LTS, `LANG=C.UTF-8` |
-| Node.js | Node.js 24 LTS and npm, with corepack enabled for pnpm |
-| Python | Python 3, `python3-venv`, and `uv` |
+| Base | Ubuntu 26.04 LTS, `LANG=C.UTF-8`, `TZ=Etc/UTC` |
+| Node.js | Node.js 24 LTS, npm, and pnpm |
+| Python | Python 3 in a virtual environment at `/opt/venv`, with uv, NumPy, pandas, matplotlib, and openpyxl |
 | Command-line tools | `git`, `curl`, `ca-certificates`, `jq`, `ripgrep`, `unzip`, `zip`, `xz-utils`, `zstd`, `file`, `procps`, `sudo` |
-| Fonts | `fonts-noto-cjk` and `fontconfig`, with Noto Sans CJK SC as the default CJK font |
+| Fonts | `fonts-noto-cjk` and `fontconfig`; matplotlib defaults to Noto Sans CJK SC |
 
 - Go is not included. The assistant can install it with `sudo` when needed.
-- Ubuntu's system Python refuses a plain `pip install` (PEP 668), so Python dependencies are installed with `uv` or in a venv.
-- CJK fonts are required: without them, Chinese text in charts and PDFs made with matplotlib and similar tools renders as boxes.
+- Ubuntu's system Python refuses a plain `pip install` (PEP 668). `/opt/venv` belongs to the sandbox user and comes first on `PATH`, so `python`, `pip`, and `uv pip` install into it without `sudo`.
+- NumPy, pandas, matplotlib, and openpyxl are preinstalled because a sandbox may be offline, where nothing can be installed.
+- pnpm is installed outright rather than left to corepack, which would download it on first use and fail in an offline sandbox.
+- CJK fonts are required: without them, Chinese text in charts and PDFs made with matplotlib and similar tools renders as boxes. The image makes Noto Sans CJK SC matplotlib's default font, so the assistant does not have to choose one.
 
 ### User and directories
 
-- The unprivileged user `workavera` (UID 1000) has passwordless `sudo`. `sudo` grants root inside the container only and has no effect on the host.
+- The unprivileged user `workavera` (UID 1000) has passwordless `sudo`. `sudo` grants root inside the container only and has no effect on the host. Ubuntu images ship an `ubuntu` user on UID 1000, which the build removes.
 - `/workspace` is owned by `workavera`; it is the working directory and the volume's mount point.
 - npm's global install prefix is under the user's home directory, so `npm install -g` needs no `sudo`.
 - Ubuntu's default `.bash_logout` is removed, so a non-interactive `bash -l` does not print a `TERM` warning on exit and change the exit code.
+- The image sets no entrypoint, network, or limits; Workavera sets all of them when it creates a container.
 
 ### Versions and publishing
 
-- The image uses its own integer tags, for example `ghcr.io/xusenlin/workavera-sandbox:1`. A published tag is never rewritten; a change in content is published as a new tag.
-- The tag in use is stored in `sandbox.image` in `configs`. When a later version changes the default tag, a migration updates the record only if it still holds the old default; a value the administrator changed is left alone.
+- The image uses its own integer tags, for example `ghcr.io/xusenlin/workavera-sandbox:1`, each for both `linux/amd64` and `linux/arm64`. A published tag is never rewritten; a change in content is published as a new tag, and that repository's `task push` refuses to push a tag that already exists.
+- That repository's `task test` starts a container with Workavera's arguments and no network, and checks the user, the workspace, the login shell, every installed tool, and a matplotlib chart with a Chinese title.
+- A locally built image has the same name as the published one, so a Workavera on the same machine uses it without pulling; development does not need a published image.
+- The tag in use is stored in `sandbox.image` in `configs`. When a later version changes the default tag, a migration updates the record only if it still holds the old default; a value the administrator changed is left alone. A new tag must be pushed before the server version that points at it is released.
+- A new package on ghcr.io is private after its first push. Set it to public once in its settings on GitHub, or other Workavera servers cannot pull it.
 - Existing containers never switch images on their own; Settings asks the user to rebuild (see section 9).
-- `Taskfile.yml` gains `build:sandbox` and `push:sandbox`, which the maintainer runs by hand, like `task push`.
 
 ## 8. Container lifecycle
 
@@ -396,7 +405,7 @@ When the user has the sandbox on and the instance is available, the system promp
 
 - You have a Linux container belonging to the current user, working in `/workspace`, whose files persist across conversations.
 - A rebuild keeps only `/workspace`, losing software installed into system directories and files in `/tmp` (a workspace reset empties `/workspace` too), so keep important files in `/workspace`.
-- The list of installed tools, and that Chinese text in charts or PDFs needs the Noto Sans CJK SC font.
+- The list of installed tools; matplotlib already defaults to Noto Sans CJK SC, and other tools need that font named to show Chinese text in charts or PDFs.
 - The current network state, distinguishing the administrator's choice from the user's; when offline, do not try to install dependencies or download anything.
 - The resource limits: memory, CPUs, and processes; disk space has no quota but is not unlimited, so large files that are no longer needed should not be kept.
 - To work on the user's files, use `sandbox_import` rather than reading their content and writing it back; to hand results to the user, use `sandbox_export`.
@@ -452,7 +461,7 @@ When exporting to a resource, the resource library's own errors (such as `docume
 - `internal/chat/stream.go`: the sandbox section of the system prompt when the sandbox is on.
 - `internal/resources/`: the binary resources of section 5, and an upload entry point that `sandbox_export` calls.
 - `migrations/`: the five default `configs` records; the new `user_preferences` fields and the UpdateRule change; migration tests.
-- `sandbox/Dockerfile`, and `build:sandbox` and `push:sandbox` in `Taskfile.yml`.
+- The sandbox image lives outside this repository, in [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox) (section 7).
 - `frontend/src/components/sandbox-settings-card.tsx`: the Sandbox card in Settings.
 - README in both languages: the sandbox's deployment prerequisites in the quick start, why container deployments are not supported, the settings in `configs`, and the security notes.
 

@@ -142,35 +142,44 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 
 ## 7. 沙箱镜像
 
-### 内容
+### 仓库
 
-镜像定义放在仓库的 `sandbox/Dockerfile`，参考 vercel/eve 的沙箱基础镜像：
+镜像在独立仓库 [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox) 中定义、测试和发布，发布为 `ghcr.io/xusenlin/workavera-sandbox:<版本>`，参考 vercel/eve 的沙箱基础镜像。它与服务端、Android、iOS 仓库一样，有自己的 `VERSION`、`CHANGELOG.md` 和 tag，按 `AGENTS.md` 的发布流程发布。
+
+该仓库的 README 列出 Workavera 依赖镜像的约定（下文"用户与目录"和已安装工具）。改动其中任何一项，都需要 Workavera 同步修改，并与新标签一起发布。
+
+### 内容
 
 | 类别 | 内容 |
 | --- | --- |
-| 基础 | Ubuntu 26.04 LTS，`LANG=C.UTF-8` |
-| Node.js | Node.js 24 LTS 与 npm，启用 corepack 以使用 pnpm |
-| Python | Python 3、`python3-venv` 和 `uv` |
+| 基础 | Ubuntu 26.04 LTS，`LANG=C.UTF-8`，`TZ=Etc/UTC` |
+| Node.js | Node.js 24 LTS、npm 和 pnpm |
+| Python | Python 3，位于 `/opt/venv` 的虚拟环境，内置 uv、NumPy、pandas、matplotlib 和 openpyxl |
 | 命令行工具 | `git`、`curl`、`ca-certificates`、`jq`、`ripgrep`、`unzip`、`zip`、`xz-utils`、`zstd`、`file`、`procps`、`sudo` |
-| 字体 | `fonts-noto-cjk` 与 `fontconfig`，默认中文字体为 Noto Sans CJK SC |
+| 字体 | `fonts-noto-cjk` 与 `fontconfig`；matplotlib 默认使用 Noto Sans CJK SC |
 
 - 不内置 Go。需要时 Assistant 可以用 `sudo` 自行安装。
-- Ubuntu 的系统 Python 不允许直接 `pip install`（PEP 668），Python 依赖通过 `uv` 或 venv 安装。
-- 中文字体是必需项：没有它，matplotlib 等工具生成的图表和 PDF 中的中文会显示为方框。
+- Ubuntu 的系统 Python 不允许直接 `pip install`（PEP 668）。`/opt/venv` 归沙箱用户所有并排在 `PATH` 最前，`python`、`pip` 和 `uv pip` 都直接安装到其中，不需要 `sudo`。
+- 预装 NumPy、pandas、matplotlib 和 openpyxl，是因为沙箱可能处于离线状态，此时无法安装任何依赖。
+- pnpm 直接安装，而不是交给 corepack 在首次使用时下载，因为离线的沙箱无法下载。
+- 中文字体是必需项：没有它，matplotlib 等工具生成的图表和 PDF 中的中文会显示为方框。镜像把 matplotlib 的默认字体设为 Noto Sans CJK SC，Assistant 不需要自己指定。
 
 ### 用户与目录
 
-- 普通用户 `workavera`（UID 1000）拥有免密 `sudo`。`sudo` 只赋予容器内的 root 权限，不影响宿主机。
+- 普通用户 `workavera`（UID 1000）拥有免密 `sudo`。`sudo` 只赋予容器内的 root 权限，不影响宿主机。Ubuntu 镜像自带的 `ubuntu` 用户占用 UID 1000，构建时将其删除。
 - `/workspace` 归 `workavera` 所有，是工作目录和数据卷的挂载点。
 - npm 全局安装目录位于用户主目录下，`npm install -g` 不需要 `sudo`。
 - 删除 Ubuntu 默认的 `.bash_logout`，避免非交互的 `bash -l` 在退出时打印 `TERM` 警告并改写退出码。
+- 镜像不设置 entrypoint、网络或资源限制，这些都由 Workavera 在创建容器时指定。
 
 ### 版本与发布
 
-- 镜像使用独立的整数标签，例如 `ghcr.io/xusenlin/workavera-sandbox:1`。已发布的标签不可重写，内容变化就发布新标签。
-- 当前使用的标签保存在 `configs` 的 `sandbox.image` 中。以后的版本更换默认标签时，用迁移把仍然等于旧默认值的记录改为新默认值；管理员改过的值保持不变。
+- 镜像使用独立的整数标签，例如 `ghcr.io/xusenlin/workavera-sandbox:1`，同时提供 `linux/amd64` 和 `linux/arm64`。已发布的标签不可重写，内容变化就发布新标签；该仓库的 `task push` 拒绝推送已经存在的标签。
+- 该仓库的 `task test` 以 Workavera 相同的参数、在断网状态下启动容器，检查用户、工作区、登录 shell、每个已安装工具，以及含中文标题的 matplotlib 图表。
+- 本地构建的镜像与发布的镜像同名，同一台机器上的 Workavera 会直接使用它而不拉取，开发时不需要先发布。
+- 当前使用的标签保存在 `configs` 的 `sandbox.image` 中。以后的版本更换默认标签时，用迁移把仍然等于旧默认值的记录改为新默认值；管理员改过的值保持不变。新标签必须在引用它的服务端版本发布之前推送。
+- ghcr.io 上新建的 package 首次推送后默认为私有，需要在 GitHub 的 package 设置中改为公开一次，否则其他 Workavera 无法拉取。
 - 已有容器不会自动更换镜像，Settings 提示用户重建（见第 9 节）。
-- `Taskfile.yml` 增加 `build:sandbox` 和 `push:sandbox` 两个任务，与 `task push` 一样由维护者手动推送。
 
 ## 8. 容器生命周期
 
@@ -396,7 +405,7 @@ docker run -d
 
 - 你有一个属于当前用户的 Linux 容器，工作目录为 `/workspace`，文件跨会话保留。
 - 容器重建后只有 `/workspace` 保留，安装到系统目录的软件和 `/tmp` 中的文件都会丢失（重置工作区则连 `/workspace` 一起清空），重要文件放在 `/workspace`。
-- 已安装的工具清单，以及在图表或 PDF 中显示中文需要使用 Noto Sans CJK SC 字体。
+- 已安装的工具清单；matplotlib 默认已使用 Noto Sans CJK SC，其他工具在图表或 PDF 中显示中文时需要指定该字体。
 - 当前的网络状态（区分管理员关闭和用户关闭）；离线时不要尝试安装依赖或下载内容。
 - 资源上限：内存、CPU 和进程数；磁盘空间没有配额但并非无限，不要保留不需要的大文件。
 - 需要处理用户的文件时，用 `sandbox_import`，不要先读出内容再写入；需要把产出交给用户时，用 `sandbox_export`。
@@ -452,7 +461,7 @@ docker run -d
 - `internal/chat/stream.go`：沙箱启用时追加系统提示。
 - `internal/resources/`：第 5 节的二进制资源，以及供 `sandbox_export` 调用的上传入口。
 - `migrations/`：写入 `configs` 的五条默认记录；`user_preferences` 新增字段和 UpdateRule 调整；附迁移测试。
-- `sandbox/Dockerfile` 与 `Taskfile.yml` 中的 `build:sandbox`、`push:sandbox`。
+- 沙箱镜像不在本仓库，见第 7 节的 [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox)。
 - `frontend/src/components/sandbox-settings-card.tsx`：Settings 中的 Sandbox 卡片。
 - README 中英文：在快速开始中说明沙箱的部署前提、不支持容器部署的原因、`configs` 中的配置项和安全提醒。
 

@@ -64,11 +64,18 @@ Frontend commands should be run from `frontend/`:
 raised immediately after a release, so a release promotes what has accumulated
 under that number instead of choosing a new one.
 
-The server (`workavera`), Android (`../workavera-android`), and iOS
-(`../workavera-ios`) repositories each carry their own `VERSION`,
-`CHANGELOG.md`, and tags, and reach their own version numbers. The process
-below is the same in all three; only the version files a bump touches and the
-artifacts a release produces differ, because the platforms require it.
+The server (`workavera`), Android (`../workavera-android`), iOS
+(`../workavera-ios`), and sandbox image (`../workavera-sandbox`) repositories
+each carry their own `VERSION`, `CHANGELOG.md`, and tags, and reach their own
+version numbers. The process below is the same in all four; only the version
+files a bump touches and the artifacts a release produces differ, because the
+platforms require it.
+
+The sandbox image's versions are whole numbers (`1`, `2`), each published once
+as `ghcr.io/xusenlin/workavera-sandbox:<version>` and never rebuilt. The server
+reaches a new one only when a migration moves the `sandbox.image` default in
+`configs`, so the image must be pushed before the server version that points at
+it is released.
 
 ### While developing
 
@@ -83,7 +90,8 @@ artifacts a release produces differ, because the platforms require it.
 Only an explicit instruction starts this. In each repository being released:
 
 1. Check that `VERSION` holds the version being released, that the tree is
-   clean, and that the checks under `## Verification` pass.
+   clean, and that the checks under `## Verification` pass (in the sandbox
+   repository, `task test`).
 2. Promote the changelog: insert `## [<version>] - <YYYY-MM-DD>` directly below
    `## [Unreleased]`, so the accumulated sections become that version's and
    `## [Unreleased]` is left empty above them. Date it the actual release day.
@@ -96,7 +104,8 @@ Only an explicit instruction starts this. In each repository being released:
    `git tag -a v<version> -m "<the release title>"`.
 5. Give the user the GitHub release text to paste, both title and body, in
    English and in Chinese. The title is
-   `Workavera v<version> — <short summary>`, naming what the release is about
+   `Workavera v<version> — <short summary>` (`Workavera Sandbox v<version> —
+   <short summary>` for the sandbox image), naming what the release is about
    rather than repeating the number alone. The body comes from the section just
    promoted, in its own wording, and leads with the compatibility note when
    there is one.
@@ -106,15 +115,17 @@ Only an explicit instruction starts this. In each repository being released:
    - Android: `task build`, which packages the signed APK into `dist/`
 
    Then tell the user to upload them to the GitHub releases, and that the rest
-   is theirs: the `ghcr.io/xusenlin/workavera` image through `task push`, and
-   the iOS build through Xcode. `task push` tags the image from `VERSION`, so
-   say that it has to run while that file still holds the released version —
-   raising it first publishes the image under a version that does not exist.
+   is theirs: the `ghcr.io/xusenlin/workavera` image through `task push`, the
+   `ghcr.io/xusenlin/workavera-sandbox` image through `task push` in the sandbox
+   repository, and the iOS build through Xcode. Both `task push` tasks tag the
+   image from `VERSION`, so say that they have to run while that file still
+   holds the released version — raising it first publishes the image under a
+   version that does not exist.
 7. Do not push. The user pushes commits and tags, unless that turn asks for it.
 
 ### Opening the next cycle
 
-Once the user confirms the image is pushed, raise the version for continued
+Once the user confirms the images are pushed, raise the version for continued
 development in its own commit, `chore: bump development version to <next>`,
 touching every file that repeats the version:
 
@@ -124,6 +135,7 @@ touching every file that repeats the version:
   `VERSION` cannot supply (`versionName` already reads the file)
 - iOS: `VERSION`, and `MARKETING_VERSION` in
   `Workavera.xcodeproj/project.pbxproj`, which is kept in step by hand
+- sandbox image: `VERSION`
 
 Work for the next version then continues on that number until the user calls
 the next release.
