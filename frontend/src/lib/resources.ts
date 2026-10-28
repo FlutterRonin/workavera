@@ -109,6 +109,40 @@ export function fileExtension(name: string) {
   return index > 0 ? name.slice(index + 1).toLowerCase() : ""
 }
 
+// Tints follow the colors people already associate with each family of
+// files, so a glance at the tile tells a PDF from a spreadsheet.
+const tileTones = {
+  pdf: "bg-red-500/10 text-red-600 dark:text-red-400",
+  word: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  sheet: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  slides: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  code: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  text: "bg-muted text-muted-foreground",
+}
+
+/** Tailwind classes that tint a file-type icon by its family. */
+export function resourceTypeTone(mediaType: string, name: string) {
+  const ext = fileExtension(name)
+  if (mediaType === "application/pdf") return tileTones.pdf
+  if (
+    mediaType.includes("word") ||
+    mediaType.includes("opendocument.text") ||
+    ["rtf", "epub"].includes(ext)
+  )
+    return tileTones.word
+  if (
+    mediaType.includes("sheet") ||
+    mediaType.includes("excel") ||
+    mediaType === "text/csv"
+  )
+    return tileTones.sheet
+  if (mediaType.includes("presentation") || mediaType.includes("powerpoint"))
+    return tileTones.slides
+  if (mediaType === "text/html" || mediaType.includes("json"))
+    return tileTones.code
+  return tileTones.text
+}
+
 /** Checks what can be checked before uploading; the server checks again. */
 export function validateResourceFile(file: File): string | null {
   if (!RESOURCE_EXTENSIONS.includes(fileExtension(file.name))) {

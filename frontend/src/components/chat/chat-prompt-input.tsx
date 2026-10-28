@@ -33,6 +33,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input"
+import { AttachmentGroup } from "@/components/ui/attachment"
 import { pb } from "@/lib/pocketbase"
 import { RESOURCE_ACCEPT, type Resource } from "@/lib/resources"
 import { cn } from "@/lib/utils"
@@ -260,15 +261,17 @@ export function ChatPromptInput({
         )}
       >
         {attachments.length > 0 && (
-          <PromptInputHeader className="px-3 pt-3">
-            {attachments.map((attachment) => (
-              <AttachmentChip
-                key={attachment.key}
-                attachment={attachment}
-                onRemove={() => remove(attachment.key)}
-                onRetry={() => retry(attachment.key)}
-              />
-            ))}
+          <PromptInputHeader className="px-3 pt-2.5 pb-0">
+            <AttachmentGroup className="w-full gap-2">
+              {attachments.map((attachment) => (
+                <AttachmentChip
+                  key={attachment.key}
+                  attachment={attachment}
+                  onRemove={() => remove(attachment.key)}
+                  onRetry={() => retry(attachment.key)}
+                />
+              ))}
+            </AttachmentGroup>
           </PromptInputHeader>
         )}
         <PromptInputBody>

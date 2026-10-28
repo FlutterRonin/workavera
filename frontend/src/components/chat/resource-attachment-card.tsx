@@ -6,11 +6,23 @@ import { Download01Icon } from "@hugeicons/core-free-icons"
 
 import { ResourceIcon } from "@/components/resources/resource-icon"
 import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentGroup,
+  AttachmentMedia,
+  AttachmentTitle,
+  AttachmentTrigger,
+} from "@/components/ui/attachment"
+import {
   formatBytes,
   formatLabel,
   getResourceState,
   openResourceFile,
   resourceErrorMessage,
+  resourceTypeTone,
   type Resource,
 } from "@/lib/resources"
 import { cn } from "@/lib/utils"
@@ -55,52 +67,51 @@ function ResourceAttachmentCard({ data }: { data: ResourceAttachmentData }) {
   }
 
   return (
-    <div
+    <Attachment
       className={cn(
-        "flex w-64 max-w-full min-w-0 items-center gap-2.5 rounded-lg border bg-background/60 px-3 py-2 text-left",
-        unavailable && "opacity-60"
+        "max-w-64",
+        unavailable && "border-dashed bg-transparent text-muted-foreground"
       )}
     >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-2.5 text-left disabled:cursor-default"
-        disabled={!current}
-        onClick={() => open(false)}
-        title={unavailable ? "This resource was deleted" : `Open ${name}`}
+      <AttachmentMedia
+        className={cn(
+          resourceTypeTone(mediaType, name),
+          unavailable && "grayscale"
+        )}
       >
-        <ResourceIcon
-          mediaType={mediaType}
-          className="size-5 text-muted-foreground"
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{name}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {unavailable
-              ? "Unavailable"
-              : [
-                  formatLabel(mediaType),
-                  size !== undefined && formatBytes(size),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-          </span>
-        </span>
-      </button>
+        <ResourceIcon mediaType={mediaType} />
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle className={cn(unavailable && "line-through")}>
+          {name}
+        </AttachmentTitle>
+        <AttachmentDescription>
+          {unavailable
+            ? "Deleted"
+            : [formatLabel(mediaType), size !== undefined && formatBytes(size)]
+                .filter(Boolean)
+                .join(" · ")}
+        </AttachmentDescription>
+      </AttachmentContent>
       {current && (
-        <button
-          type="button"
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={() => open(true)}
-          aria-label={`Download ${name}`}
-        >
-          <HugeiconsIcon
-            icon={Download01Icon}
-            strokeWidth={2}
-            className="size-4"
+        <>
+          <AttachmentActions>
+            <AttachmentAction
+              aria-label={`Download ${name}`}
+              title="Download"
+              onClick={() => open(true)}
+            >
+              <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
+            </AttachmentAction>
+          </AttachmentActions>
+          <AttachmentTrigger
+            aria-label={`Open ${name}`}
+            title={`Open ${name}`}
+            onClick={() => open(false)}
           />
-        </button>
+        </>
       )}
-    </div>
+    </Attachment>
   )
 }
 
@@ -111,10 +122,14 @@ export function ResourceAttachmentGroup({
 }) {
   if (attachments.length === 0) return null
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <AttachmentGroup
+      role="group"
+      aria-label="Attached files"
+      className="max-w-full self-end"
+    >
       {attachments.map((data) => (
         <ResourceAttachmentCard key={data.resourceId} data={data} />
       ))}
-    </div>
+    </AttachmentGroup>
   )
 }

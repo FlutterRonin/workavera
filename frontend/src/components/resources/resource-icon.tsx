@@ -6,6 +6,7 @@ import {
   SourceCodeIcon,
 } from "@hugeicons/core-free-icons"
 
+import { resourceTypeTone } from "@/lib/resources"
 import { cn } from "@/lib/utils"
 
 function iconFor(mediaType: string) {
@@ -29,5 +30,30 @@ export function ResourceIcon({
       strokeWidth={2}
       className={cn("size-4 shrink-0", className)}
     />
+  )
+}
+
+/** A small tinted square identifying a file's type. */
+export function ResourceTypeTile({
+  mediaType,
+  name,
+  className,
+  iconClassName,
+}: {
+  mediaType: string
+  name: string
+  className?: string
+  iconClassName?: string
+}) {
+  return (
+    <span
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-md",
+        resourceTypeTone(mediaType, name),
+        className
+      )}
+    >
+      <ResourceIcon mediaType={mediaType} className={iconClassName} />
+    </span>
   )
 }

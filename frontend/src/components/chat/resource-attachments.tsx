@@ -1,12 +1,25 @@
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon, RefreshIcon } from "@hugeicons/core-free-icons"
 
-import { ResourceIcon } from "@/components/resources/resource-icon"
+import {
+  ResourceIcon,
+  ResourceTypeTile,
+} from "@/components/resources/resource-icon"
+import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentMedia,
+  AttachmentTitle,
+} from "@/components/ui/attachment"
 import { Spinner } from "@/components/ui/spinner"
 import {
   formatBytes,
   formatLabel,
   MAX_MESSAGE_RESOURCES,
+  resourceTypeTone,
   type Resource,
 } from "@/lib/resources"
 import { cn } from "@/lib/utils"
@@ -23,64 +36,54 @@ export function AttachmentChip({
   onRetry: () => void
 }) {
   const failed = attachment.status === "error"
+  const uploading = attachment.status === "uploading"
   return (
-    <div
-      className={cn(
-        "flex max-w-64 min-w-0 items-center gap-2 rounded-lg border bg-background px-2 py-1.5 text-xs",
-        failed && "border-destructive/40 bg-destructive/5"
-      )}
+    <Attachment
+      size="xs"
+      state={uploading ? "uploading" : failed ? "error" : "done"}
+      className="max-w-60"
       title={failed ? attachment.error : attachment.name}
     >
-      {attachment.status === "uploading" ? (
-        <Spinner className="size-4 shrink-0" />
-      ) : (
-        <ResourceIcon
-          mediaType={attachment.mediaType}
-          className={failed ? "text-destructive" : "text-muted-foreground"}
-        />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{attachment.name}</div>
-        <div
-          className={cn(
-            "truncate",
-            failed ? "text-destructive" : "text-muted-foreground"
-          )}
-        >
-          {attachment.status === "uploading"
+      <AttachmentMedia
+        className={cn(
+          !uploading &&
+            !failed &&
+            resourceTypeTone(attachment.mediaType, attachment.name)
+        )}
+      >
+        {uploading ? (
+          <Spinner />
+        ) : (
+          <ResourceIcon mediaType={attachment.mediaType} />
+        )}
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle>{attachment.name}</AttachmentTitle>
+        <AttachmentDescription>
+          {uploading
             ? "Uploading…"
             : failed
               ? attachment.error
               : `${formatLabel(attachment.mediaType)} · ${formatBytes(attachment.size)}`}
-        </div>
-      </div>
-      {failed && attachment.file && (
-        <button
-          type="button"
-          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={onRetry}
-          aria-label={`Retry uploading ${attachment.name}`}
+        </AttachmentDescription>
+      </AttachmentContent>
+      <AttachmentActions>
+        {failed && attachment.file && (
+          <AttachmentAction
+            aria-label={`Retry uploading ${attachment.name}`}
+            onClick={onRetry}
+          >
+            <HugeiconsIcon icon={RefreshIcon} strokeWidth={2} />
+          </AttachmentAction>
+        )}
+        <AttachmentAction
+          aria-label={`Remove ${attachment.name}`}
+          onClick={onRemove}
         >
-          <HugeiconsIcon
-            icon={RefreshIcon}
-            strokeWidth={2}
-            className="size-3.5"
-          />
-        </button>
-      )}
-      <button
-        type="button"
-        className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-        onClick={onRemove}
-        aria-label={`Remove ${attachment.name}`}
-      >
-        <HugeiconsIcon
-          icon={Cancel01Icon}
-          strokeWidth={2}
-          className="size-3.5"
-        />
-      </button>
-    </div>
+          <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+        </AttachmentAction>
+      </AttachmentActions>
+    </Attachment>
   )
 }
 
@@ -144,9 +147,11 @@ export function ResourcePickerList({
                 onMouseEnter={() => onHighlight(index)}
                 onClick={() => onSelect(resource)}
               >
-                <ResourceIcon
+                <ResourceTypeTile
                   mediaType={resource.media_type}
-                  className="text-muted-foreground"
+                  name={resource.original_name}
+                  className="size-6 rounded-md"
+                  iconClassName="size-3.5"
                 />
                 <span className="min-w-0 flex-1 truncate">
                   {resource.display_name}

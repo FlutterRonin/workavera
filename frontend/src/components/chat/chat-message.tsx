@@ -325,24 +325,11 @@ function MessageParts({
       .map((part) => [part.data.toolCallId, part.data])
   )
 
-  // Attachments render as one group where the first one appears. The server
-  // stores them before the text, so they sit above it as a block.
-  const attachments = message.parts.flatMap((part) =>
-    part.type === "data-resource" ? [part.data] : []
-  )
-  const firstAttachment = message.parts.findIndex(
-    (part) => part.type === "data-resource"
-  )
-
   return message.parts.map((part, index) => {
     switch (part.type) {
+      // Rendered above the bubble by ChatMessageItem.
       case "data-resource":
-        return index === firstAttachment ? (
-          <ResourceAttachmentGroup
-            key="resource-attachments"
-            attachments={attachments}
-          />
-        ) : null
+        return null
       case "text":
         return (
           <MessageResponse
@@ -423,6 +410,14 @@ function ChatMessageItemComponent({
   const metadata = message.metadata
   const createdAt = metadata?.createdAt
   const usage = metadata?.usage
+  // Attachments sit above the bubble as their own row, so a message that only
+  // carries files shows no empty bubble.
+  const attachments = message.parts.flatMap((part) =>
+    part.type === "data-resource" ? [part.data] : []
+  )
+  const hasBubbleContent = message.parts.some(
+    (part) => part.type !== "data-resource"
+  )
 
   return (
     <Message from={message.role}>
@@ -455,12 +450,18 @@ function ChatMessageItemComponent({
         )}
       </div>
 
-      <MessageContent>
-        <MessageParts message={message} runActive={runActive} />
-        {!isUser && runActive && !message.parts.some(isPartPending) && (
-          <ThinkingIndicator />
-        )}
-      </MessageContent>
+      {attachments.length > 0 && (
+        <ResourceAttachmentGroup attachments={attachments} />
+      )}
+
+      {(!isUser || hasBubbleContent) && (
+        <MessageContent>
+          <MessageParts message={message} runActive={runActive} />
+          {!isUser && runActive && !message.parts.some(isPartPending) && (
+            <ThinkingIndicator />
+          )}
+        </MessageContent>
+      )}
 
       {!isUser &&
         usage &&
