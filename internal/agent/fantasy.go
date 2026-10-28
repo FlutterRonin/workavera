@@ -281,8 +281,13 @@ func toFantasyMessages(messages []Message) ([]fantasy.Message, error) {
 		case "user":
 			parts := make([]fantasy.MessagePart, 0, len(message.Parts))
 			for _, part := range message.Parts {
-				if partType, _ := part["type"].(string); partType == "text" {
+				switch partType, _ := part["type"].(string); partType {
+				case "text":
 					if text, _ := part["text"].(string); text != "" {
+						parts = append(parts, fantasy.TextPart{Text: text})
+					}
+				case "data-resource":
+					if text := ResourceAttachmentText(part); text != "" {
 						parts = append(parts, fantasy.TextPart{Text: text})
 					}
 				}

@@ -34,6 +34,11 @@ const ReadingPage = lazy(() =>
     default: module.ReadingPage,
   }))
 )
+const ResourcesPage = lazy(() =>
+  import("@/pages/resources").then((module) => ({
+    default: module.ResourcesPage,
+  }))
+)
 const SettingsPage = lazy(() =>
   import("@/pages/settings").then((module) => ({
     default: module.SettingsPage,
@@ -91,6 +96,7 @@ export function AppRouter() {
               <Route path="/contacts" element={<ContactsPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/reading" element={<ReadingPage />} />
+              <Route path="/resources" element={<ResourcesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />

@@ -5,6 +5,7 @@
 
 workavera
 pb_data
+anydoc_cache
 coverage.out
 *.test
 

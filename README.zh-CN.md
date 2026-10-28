@@ -140,6 +140,12 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 
 只有当 `users` 集合为空时才会初始化 demo 用户，因此升级已有工作区不会新增账号，也不会覆盖现有账号。
 
+### 文件转换的内存需求
+
+Resources 用内嵌的 WebAssembly 模块转换上传的文档，该模块会被编译成本机代码一次，并缓存在 `pb_data` 旁边的 `anydoc_cache/` 中。编译会短暂占用约 **550 MB** 内存，在服务启动后于后台进行：首次部署、升级之后、更换 CPU 以及重建容器之后都会发生。请按这个峰值而不是空闲时接近零的占用来规划主机内存；之后每个进行中的转换最多约占 100 MB。编译失败时 Workavera 其余功能照常可用，只有资源上传不可用。该缓存不含用户数据，可以安全删除，代价只是重新编译一次。
+
+助手为资源创建的下载链接，只在服务端 Application URL（PocketBase 设置）使用 HTTPS 时才会签发。
+
 ## 产品模块
 
 每个模块只写一句，详细内容见下方的[产品文档](#产品文档)。
@@ -149,6 +155,7 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 - **Calendar** 在同一视图中合并个人事件与可见的 Board 截止事项，支持重复日程和站内提醒。
 - **Chat** 是你和模型协作的地方：持久化的流式会话，浏览器断开后运行继续，展示推理与工具调用，长会话自动压缩，并提供默认关闭的长期记忆。
 - **Reading** 保存外部链接和笔记，支持关联项目、标签、阅读状态和 AI 总结。
+- **Resources** 保存你上传的文件（PDF、Office、OpenDocument、RTF、EPUB、CSV、HTML、文本和 JSON）及其提取出的文本，Chat 可以用 `+` 或 `#` 附加它们，助手可以搜索和阅读其内容。
 - **Contacts** 提供可搜索的团队联系人列表和个人收藏。
 - **Dashboard、Notifications 与 Settings** 分别负责工作概览、站内通知收件箱，以及模型配置与分享、外观和个人资料。
 

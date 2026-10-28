@@ -183,6 +183,11 @@ func renderTranscriptMessage(message workagent.Message) string {
 				b.WriteString(truncateForTranscript(text))
 				b.WriteString("\n")
 			}
+		case "data-resource":
+			data, _ := part["data"].(map[string]any)
+			resourceID, _ := data["resourceId"].(string)
+			name, _ := data["name"].(string)
+			b.WriteString("[attached file " + truncateForTranscript(name) + " (resourceId " + resourceID + ")]\n")
 		case "dynamic-tool":
 			toolName, _ := part["toolName"].(string)
 			b.WriteString("[tool " + toolName + "]")

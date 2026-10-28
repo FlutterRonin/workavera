@@ -144,6 +144,12 @@ By default it listens on <http://127.0.0.1:8090>. Pass `--http=0.0.0.0:8090` to 
 
 The demo user is seeded only when the `users` collection is empty, so upgrades do not add or overwrite an account in an existing workspace.
 
+### Memory for file conversion
+
+Resources converts uploaded documents with an embedded WebAssembly module that is compiled to native code once and cached in `anydoc_cache/` next to `pb_data`. That compilation briefly needs about **550 MB** of memory and runs in the background right after startup: on first deployment, after an upgrade, on a new CPU, and after a container is rebuilt. Size the host for that peak, not for the near-zero usage while idle; each conversion in progress then needs up to about 100 MB. If the compilation cannot run, the rest of Workavera still works and only resource uploads are unavailable. The cache holds no user data and is safe to delete, which only costs one recompilation.
+
+Download links the assistant creates for resources are only issued when the server's Application URL (PocketBase settings) uses HTTPS.
+
 ## Product areas
 
 One line each; the [product documentation](#product-documentation) below carries the detail.
@@ -153,6 +159,7 @@ One line each; the [product documentation](#product-documentation) below carries
 - **Calendar** combines personal events and visible Board deadlines in one view, with recurrence and in-app reminders.
 - **Chat** is where you work with the model: durable streaming conversations that survive browser disconnects, with visible reasoning and tool calls, automatic compaction of long conversations, and optional long-term memory that is off by default.
 - **Reading** saves external links and notes with projects, tags, read state, and AI summaries.
+- **Resources** keeps the files you upload (PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, and JSON) and their extracted text, so Chat can attach them with `+` or `#` and the assistant can search and read them.
 - **Contacts** provides a searchable team contact list with personal favorites.
 - **Dashboard, Notifications, and Settings** cover the workspace overview, the in-app notification inbox, model configuration and sharing, appearance, and profile.
 

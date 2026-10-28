@@ -20,8 +20,8 @@ import (
 func TestFactoryRegistersOnlyProductionTools(t *testing.T) {
 	factory := NewFactory(nil)
 	registered := factory.ForActor("actor-1")
-	if len(registered) != 30 {
-		t.Fatalf("expected thirty production tools, got %d", len(registered))
+	if len(registered) != 33 {
+		t.Fatalf("expected thirty-three production tools, got %d", len(registered))
 	}
 	names := map[string]bool{}
 	for _, tool := range registered {
@@ -58,6 +58,9 @@ func TestFactoryRegistersOnlyProductionTools(t *testing.T) {
 		"docs_move",
 		"docs_replace",
 		"docs_write_chunk",
+		"resources_list",
+		"resources_search",
+		"resources_read",
 	} {
 		if !names[name] {
 			t.Fatalf("missing production tool %q in registry: %#v", name, names)
@@ -68,6 +71,11 @@ func TestFactoryRegistersOnlyProductionTools(t *testing.T) {
 	}
 	if names["board_delete_project"] {
 		t.Fatalf("project deletion must not be registered: %#v", names)
+	}
+	// Download links are bearer credentials approved per call, so they must
+	// never reach the MCP surface that ForActor feeds.
+	if names["resources_create_download_url"] || names["resources_revoke_download_url"] {
+		t.Fatalf("resource download link tools must be Chat-only: %#v", names)
 	}
 }
 
@@ -100,9 +108,15 @@ func TestMemoryToolsAreChatOnlyAndPreferenceGated(t *testing.T) {
 	if base["system_memory_upsert"] || base["system_memory_forget"] {
 		t.Fatalf("memory tools leaked into the base/MCP registry: %v", base)
 	}
-	disabled := factory.ForChat(workagent.ToolScope{ActorID: user.Id})
-	if len(disabled) != len(base) {
-		t.Fatalf("disabled Chat memory added tools: %d vs %d", len(disabled), len(base))
+	disabled := map[string]bool{}
+	for _, tool := range factory.ForChat(workagent.ToolScope{ActorID: user.Id}) {
+		disabled[tool.Info().Name] = true
+	}
+	if disabled["system_memory_upsert"] || disabled["system_memory_forget"] {
+		t.Fatalf("disabled Chat memory added memory tools: %v", disabled)
+	}
+	if len(disabled) != len(base)+2 || !disabled["resources_create_download_url"] || !disabled["resources_revoke_download_url"] {
+		t.Fatalf("Chat must add exactly the resource download link tools: %v", disabled)
 	}
 
 	preference, err := app.FindFirstRecordByFilter(preferences.CollectionName, "owner = {:owner}", dbx.Params{"owner": user.Id})

@@ -43,6 +43,14 @@ import {
 } from "./calendar-tool-output"
 import { ApprovalToolCard } from "./approval-tool-card"
 import { MemoryToolCard } from "./memory-tool-output"
+import { ResourceAttachmentGroup } from "./resource-attachment-card"
+import {
+  ResourceDownloadLinkCard,
+  ResourcesListToolCard,
+  ResourcesReadToolCard,
+  ResourcesRevokeToolCard,
+  ResourcesSearchToolCard,
+} from "./resources-tool-output"
 import { ToolInput } from "./tool-input"
 
 /**
@@ -178,14 +186,34 @@ function ToolCard({
 }: ToolCardProps) {
   if (approval) {
     return (
-      <ApprovalToolCard
-        part={part}
-        approval={approval}
-        runId={runId}
-        runActive={runActive}
-        messageStatus={messageStatus}
-      />
+      <>
+        <ApprovalToolCard
+          part={part}
+          approval={approval}
+          runId={runId}
+          runActive={runActive}
+          messageStatus={messageStatus}
+        />
+        {part.toolName === "resources_create_download_url" && (
+          <ResourceDownloadLinkCard part={part} />
+        )}
+      </>
     )
+  }
+  if (part.toolName === "resources_list") {
+    return <ResourcesListToolCard part={part} />
+  }
+  if (part.toolName === "resources_search") {
+    return <ResourcesSearchToolCard part={part} />
+  }
+  if (part.toolName === "resources_read") {
+    return <ResourcesReadToolCard part={part} />
+  }
+  if (part.toolName === "resources_create_download_url") {
+    return <ResourceDownloadLinkCard part={part} />
+  }
+  if (part.toolName === "resources_revoke_download_url") {
+    return <ResourcesRevokeToolCard part={part} />
   }
   if (part.toolName === "contacts_search") {
     return <ContactsToolCard part={part} />
@@ -297,8 +325,24 @@ function MessageParts({
       .map((part) => [part.data.toolCallId, part.data])
   )
 
+  // Attachments render as one group where the first one appears. The server
+  // stores them before the text, so they sit above it as a block.
+  const attachments = message.parts.flatMap((part) =>
+    part.type === "data-resource" ? [part.data] : []
+  )
+  const firstAttachment = message.parts.findIndex(
+    (part) => part.type === "data-resource"
+  )
+
   return message.parts.map((part, index) => {
     switch (part.type) {
+      case "data-resource":
+        return index === firstAttachment ? (
+          <ResourceAttachmentGroup
+            key="resource-attachments"
+            attachments={attachments}
+          />
+        ) : null
       case "text":
         return (
           <MessageResponse

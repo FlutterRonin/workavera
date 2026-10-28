@@ -9,6 +9,26 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Resources is a personal library for uploaded files at `/resources`. A PDF,
+  Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown,
+  or JSON file of up to 6 MB is stored as it is, and its text is extracted to
+  Markdown in the same request; the server checks the real file type rather
+  than trusting the extension, and an upload that cannot be converted — a
+  password-protected or damaged document, or a PDF with scanned pages, whose
+  page numbers are named — is refused with a clear reason instead of being
+  kept half-usable. Files can be searched by name, opened, downloaded,
+  renamed, and deleted, and their extracted text can be viewed. In Chat, the
+  `+` button or dropping a file uploads it right away, and typing `#` picks an
+  existing resource; a message can carry up to six files, with or without
+  text. The assistant sees what was attached without the content and reads or
+  searches the extracted text through new `resources_list`,
+  `resources_search`, and `resources_read` tools, which the MCP server offers
+  as well. On request, and only after approval, it can create a download link
+  for the original file that works for five minutes, and revoke it once an
+  external service has fetched the file; links can also be reviewed and
+  revoked from the Resources page. Deleting a resource leaves past messages
+  intact and marks their attachment as unavailable.
+
 - Reading has a discovery panel behind the sparkle button in its sidebar. It
   keeps a list of subscriptions the user owns, either an RSS or Atom feed of
   their own — a site, a newsletter, or a repository's `releases.atom` — or

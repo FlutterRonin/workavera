@@ -7,6 +7,7 @@ import {
   ContactBookIcon,
   Calendar03Icon,
   BookOpen01Icon,
+  FolderLibraryIcon,
   Settings02Icon,
 } from "@hugeicons/core-free-icons"
 
@@ -66,6 +67,12 @@ export const navGroups: NavGroup[] = [
         url: "/docs",
         icon: DocumentAttachmentIcon,
         description: "Create notes, team documents, and public content",
+      },
+      {
+        title: "Resources",
+        url: "/resources",
+        icon: FolderLibraryIcon,
+        description: "Uploaded files you can reuse in Chat",
       },
       {
         title: "Calendar",

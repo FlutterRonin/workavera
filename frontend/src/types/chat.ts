@@ -92,9 +92,21 @@ export type ToolApprovalData = {
   }
 }
 
+/** A resource attached to a user message. The server rebuilds it from the
+ * stored resource when the message is sent; it is a snapshot that later
+ * renames do not change. Name, type, and size may be absent on the client's
+ * own unsent copy. */
+export type ResourceAttachmentData = {
+  resourceId: string
+  name?: string
+  mediaType?: string
+  size?: number
+}
+
 export type ChatDataParts = {
   compaction: CompactionData
   approval: ToolApprovalData
+  resource: ResourceAttachmentData
 }
 
 export type ChatUIMessage = UIMessage<ChatMessageMetadata, ChatDataParts>

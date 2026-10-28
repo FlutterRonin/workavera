@@ -66,13 +66,20 @@ func (f *Factory) ForActor(actorID string) []fantasy.AgentTool {
 		newDocsMoveTool(f.app, actorID),
 		newDocsReplaceTool(f.app, actorID),
 		newDocsWriteChunkTool(f.app, actorID),
+		newResourcesListTool(f.app, actorID),
+		newResourcesSearchTool(f.app, actorID),
+		newResourcesReadTool(f.app, actorID),
 	}
 }
 
-// ForChat returns the normal actor tools plus the Chat-only tools: memory
-// tools when the user's memory preference is enabled, and the tools their own
-// MCP servers contribute. MCP deliberately continues to call ForActor, so
-// neither is ever exposed through API keys.
+// ForChat returns the normal actor tools plus the Chat-only tools: the
+// resource download link tools, memory tools when the user's memory preference
+// is enabled, and the tools their own MCP servers contribute. MCP deliberately
+// continues to call ForActor, so none of them is ever exposed through API keys.
+//
+// Download links stay in Chat because each one is a bearer credential whose
+// target and purpose the user approves per call, and an API key only has the
+// single allow_destructive switch to express consent.
 //
 // Remote MCP tools stay out of ForActor for a specific reason: an API key's
 // allow_destructive scope is enforced against a known list of built-in
@@ -80,7 +87,10 @@ func (f *Factory) ForActor(actorID string) []fantasy.AgentTool {
 // third-party tool. Exporting them would silently widen what a read-only key
 // can do.
 func (f *Factory) ForChat(scope workagent.ToolScope) []fantasy.AgentTool {
-	tools := f.ForActor(scope.ActorID)
+	tools := append(f.ForActor(scope.ActorID),
+		newResourcesCreateDownloadURLTool(f.app, scope.ActorID),
+		newResourcesRevokeDownloadURLTool(f.app, scope.ActorID),
+	)
 	if f.app == nil {
 		return tools
 	}

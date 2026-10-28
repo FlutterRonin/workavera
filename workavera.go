@@ -25,6 +25,7 @@ import (
 	"github.com/xusenlin/workavera/internal/notifications"
 	"github.com/xusenlin/workavera/internal/preferences"
 	"github.com/xusenlin/workavera/internal/reading"
+	"github.com/xusenlin/workavera/internal/resources"
 	_ "github.com/xusenlin/workavera/migrations"
 )
 
@@ -41,6 +42,7 @@ func main() {
 	contacts.Register(app)
 	docs.Register(app)
 	reading.Register(app)
+	resources.Register(app)
 	llm.Register(app)
 	mcpclient.Register(app, version)
 	mcpserver.Register(app, version)
