@@ -94,8 +94,8 @@ to phones and tablets without routing its data through a separate service.
   from GitHub Releases. It is built with Kotlin and Jetpack Compose, and its
   [source code](https://github.com/xusenlin/workavera-android) is open.
 - **[Get Workavera for iOS on the App Store](https://apps.apple.com/app/workavera/id6794339518).**
-  The native SwiftUI app supports iPhone and iPad; its source is not public yet
-  and will be open-sourced later.
+  The native SwiftUI app supports iPhone and iPad, and its
+  [source code](https://github.com/xusenlin/workavera-ios) is open.
 
 Both apps are early previews; features may be incomplete or trail the web app
 while development continues.

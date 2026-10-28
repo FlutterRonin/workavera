@@ -93,7 +93,8 @@ Workavera 自托管服务，无需通过额外的第三方服务，即可在手�
   客户端使用 Kotlin 与 Jetpack Compose 开发，[源码](https://github.com/xusenlin/workavera-android)
   已开源。
 - **[前往 App Store 获取 Workavera iOS 客户端](https://apps.apple.com/app/workavera/id6794339518)。**
-  原生 SwiftUI 客户端适配 iPhone 与 iPad，源码暂未开放，稍后开源。
+  原生 SwiftUI 客户端适配 iPhone 与 iPad，[源码](https://github.com/xusenlin/workavera-ios)
+  已开源。
 
 两个客户端目前均为早期预览版，部分功能仍在开发中，功能进度可能暂时落后于 Web 版。
 
