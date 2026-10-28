@@ -158,7 +158,7 @@ One line each; the [product documentation](#product-documentation) below carries
 
 ## Development
 
-Only needed when contributing or building from source. Requires Go 1.26.5+, Node.js with [pnpm](https://pnpm.io/), and [Task](https://taskfile.dev/) 3+.
+Only needed when contributing or building from source. Requires Go 1.27.2+, Node.js with [pnpm](https://pnpm.io/), and [Task](https://taskfile.dev/) 3+.
 
 ```bash
 cd frontend && pnpm install && cd ..   # once

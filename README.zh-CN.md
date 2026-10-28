@@ -154,7 +154,7 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 
 ## 开发
 
-以下内容仅在参与开发或从源码构建时需要。环境要求：Go 1.26.5+、Node.js 与 [pnpm](https://pnpm.io/)、[Task](https://taskfile.dev/) 3+。
+以下内容仅在参与开发或从源码构建时需要。环境要求：Go 1.27.2+、Node.js 与 [pnpm](https://pnpm.io/)、[Task](https://taskfile.dev/) 3+。
 
 ```bash
 cd frontend && pnpm install && cd ..   # 首次执行一次

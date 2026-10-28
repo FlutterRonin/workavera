@@ -50,6 +50,16 @@ and versions follow [Semantic Versioning](https://semver.org/).
   span rather than a single deadline. The board task form, the Board API, and
   the `board_create_task` and `board_update_task` assistant tools all accept it,
   and a start date after the due date is refused.
+- PocketBase is updated from 0.39.10 to 0.40.6, which moves JSON handling onto
+  `encoding/json/v2`, enables SQLite's defensive mode, backs up the database
+  without holding a transaction lock, and caps the source size of generated
+  thumbnails. Building from source now requires Go 1.27.2, and the Docker
+  image builds with it.
+- Fantasy is updated from 0.41.2 to 0.45.5. Streamed tool calls are repaired
+  and dispatched only once the model has finished its turn, so a truncated or
+  filtered response no longer runs a tool on half-written input, and a tool
+  that fails now reports its error back to the model instead of ending the
+  run.
 
 ### Fixed
 
