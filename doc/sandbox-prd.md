@@ -116,7 +116,7 @@ Instance settings live in the existing `configs` collection, like `system.timezo
 | key | Default | Description |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | The instance's master switch. When off, no user can use the sandbox |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:1"` | The image used when a container is created or rebuilt; can point at a registry mirror or a self-hosted registry |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | The image used when a container is created or rebuilt; can point at a registry mirror or a self-hosted registry |
 | `sandbox.network` | `true` | The network master switch. When off, every sandbox is offline and users' network switches are disabled |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | The resource limits of each sandbox |
 | `sandbox.idle_timeout_minutes` | `60` | Minutes without activity before a container stops automatically; `0` never stops it |
@@ -171,6 +171,16 @@ That repository's README lists what Workavera relies on in the image (the user a
 - npm's global install prefix is under the user's home directory, so `npm install -g` needs no `sudo`.
 - Ubuntu's default `.bash_logout` is removed, so a non-interactive `bash -l` does not print a `TERM` warning on exit and change the exit code.
 - The image sets no entrypoint, network, or limits; Workavera sets all of them when it creates a container.
+
+### Tool declaration
+
+The image declares its installed tools and fonts in the label `org.workavera.sandbox.tools`, a short English description covering Node.js, Python and the data stack in `/opt/venv`, the command-line tools, and the CJK font matplotlib uses by default.
+
+- When building the system prompt, Workavera reads the label with `docker image inspect`, without starting a container, and caches it by image ID. It reads the image the user's container actually uses, or `sandbox.image` when no container exists yet.
+- The label travels with the image to a registry mirror, and an image an administrator builds can set the same label to describe its own environment.
+- Without the label, the system prompt says the image declares no tools and that a tool should be checked with a command before relying on it.
+- The sandbox repository's smoke test checks that the label exists and names the main tools actually installed, so the two cannot drift apart.
+- Version 1 was published before the label existed, so the `sandbox.image` default starts at version 2.
 
 ### Versions and publishing
 
@@ -324,14 +334,14 @@ A `GET` response looks like:
   "enabled": true,
   "online": true,
   "networkAllowed": true,
-  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:1",
+  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:2",
   "limits": { "memory": "1g", "cpus": 2, "pids": 512 },
   "idleTimeoutMinutes": 60,
   "container": {
     "name": "workavera-abc123def456ghi",
     "state": "running",
     "phase": "",
-    "image": "ghcr.io/xusenlin/workavera-sandbox:1",
+    "image": "ghcr.io/xusenlin/workavera-sandbox:2",
     "createdAt": "2026-10-28T08:00:00Z",
     "error": ""
   }
@@ -405,7 +415,7 @@ When the user has the sandbox on and the instance is available, the system promp
 
 - You have a Linux container belonging to the current user, working in `/workspace`, whose files persist across conversations.
 - A rebuild keeps only `/workspace`, losing software installed into system directories and files in `/tmp` (a workspace reset empties `/workspace` too), so keep important files in `/workspace`.
-- The list of installed tools; matplotlib already defaults to Noto Sans CJK SC, and other tools need that font named to show Chinese text in charts or PDFs.
+- The text of the image's `org.workavera.sandbox.tools` label (see "Tool declaration" in section 7); without the label, that the image declares no tools and a tool should be checked with a command first.
 - The current network state, distinguishing the administrator's choice from the user's; when offline, do not try to install dependencies or download anything.
 - The resource limits: memory, CPUs, and processes; disk space has no quota but is not unlimited, so large files that are no longer needed should not be kept.
 - To work on the user's files, use `sandbox_import` rather than reading their content and writing it back; to hand results to the user, use `sandbox_export`.
@@ -490,6 +500,7 @@ When exporting to a resource, the resource library's own errors (such as `docume
 21. Changing `sandbox_enabled` or `sandbox_offline` through the PocketBase Records API is rejected.
 22. No `sandbox_` tool appears in the MCP Server's tool list or under any API key.
 23. Uploading PNG, JPEG, GIF, WebP, and ZIP resources succeeds and `resources_read_markdown` returns `resource_has_no_text` for them; uploading SVG is rejected; image-only PDFs are still rejected with `document_needs_ocr`.
+24. With the default image, the system prompt includes the text of its `org.workavera.sandbox.tools` label, and a stopped container is not started to read it; after `sandbox.image` is changed to an image without the label and the container is rebuilt, the system prompt asks for tools to be checked with a command first.
 
 ## 16. Settled product choices
 

@@ -116,7 +116,7 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 | key | 默认值 | 说明 |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | 实例总开关。关闭后所有用户都无法使用沙箱 |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:1"` | 新建或重建容器时使用的镜像，可以换成镜像加速地址或自建仓库 |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | 新建或重建容器时使用的镜像，可以换成镜像加速地址或自建仓库 |
 | `sandbox.network` | `true` | 网络总开关。关闭后所有沙箱离线，用户的网络开关不可用 |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | 每个沙箱的资源上限 |
 | `sandbox.idle_timeout_minutes` | `60` | 无活动多少分钟后自动停止容器，`0` 表示不自动停止 |
@@ -171,6 +171,16 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 - npm 全局安装目录位于用户主目录下，`npm install -g` 不需要 `sudo`。
 - 删除 Ubuntu 默认的 `.bash_logout`，避免非交互的 `bash -l` 在退出时打印 `TERM` 警告并改写退出码。
 - 镜像不设置 entrypoint、网络或资源限制，这些都由 Workavera 在创建容器时指定。
+
+### 工具声明
+
+镜像通过标签 `org.workavera.sandbox.tools` 用一段简短的英文声明已安装的工具和字体，例如 Node.js、`/opt/venv` 中的 Python 与数据分析包、命令行工具，以及 matplotlib 默认使用的中文字体。
+
+- Workavera 构建系统提示时用 `docker image inspect` 读取这个标签，不需要启动容器，结果按镜像 ID 缓存。读取对象是用户容器实际使用的镜像；容器尚未创建时，读取 `sandbox.image`。
+- 标签随镜像一起复制到镜像加速地址。管理员自建的镜像也可以写同样的标签，描述自己的环境。
+- 没有该标签时，系统提示说明该镜像没有声明工具，使用某个工具前先用命令确认。
+- 沙箱仓库的冒烟测试检查标签存在，并且提到了实际安装的主要工具，避免两者脱节。
+- v1 发布时还没有这个标签，因此 `sandbox.image` 的默认值从 v2 开始。
 
 ### 版本与发布
 
@@ -324,14 +334,14 @@ docker run -d
   "enabled": true,
   "online": true,
   "networkAllowed": true,
-  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:1",
+  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:2",
   "limits": { "memory": "1g", "cpus": 2, "pids": 512 },
   "idleTimeoutMinutes": 60,
   "container": {
     "name": "workavera-abc123def456ghi",
     "state": "running",
     "phase": "",
-    "image": "ghcr.io/xusenlin/workavera-sandbox:1",
+    "image": "ghcr.io/xusenlin/workavera-sandbox:2",
     "createdAt": "2026-10-28T08:00:00Z",
     "error": ""
   }
@@ -405,7 +415,7 @@ docker run -d
 
 - 你有一个属于当前用户的 Linux 容器，工作目录为 `/workspace`，文件跨会话保留。
 - 容器重建后只有 `/workspace` 保留，安装到系统目录的软件和 `/tmp` 中的文件都会丢失（重置工作区则连 `/workspace` 一起清空），重要文件放在 `/workspace`。
-- 已安装的工具清单；matplotlib 默认已使用 Noto Sans CJK SC，其他工具在图表或 PDF 中显示中文时需要指定该字体。
+- 镜像的 `org.workavera.sandbox.tools` 标签原文（见第 7 节"工具声明"）；没有标签时，说明镜像未声明工具，使用前先用命令确认。
 - 当前的网络状态（区分管理员关闭和用户关闭）；离线时不要尝试安装依赖或下载内容。
 - 资源上限：内存、CPU 和进程数；磁盘空间没有配额但并非无限，不要保留不需要的大文件。
 - 需要处理用户的文件时，用 `sandbox_import`，不要先读出内容再写入；需要把产出交给用户时，用 `sandbox_export`。
@@ -490,6 +500,7 @@ docker run -d
 21. 通过 PocketBase Records API 修改 `sandbox_enabled` 或 `sandbox_offline` 被拒绝。
 22. MCP Server 的工具列表和 API key 范围内不出现任何 `sandbox_` 工具。
 23. 上传 PNG、JPEG、GIF、WebP、ZIP 资源成功，`resources_read_markdown` 返回 `resource_has_no_text`；上传 SVG 被拒绝；图片型 PDF 仍按 `document_needs_ocr` 拒绝。
+24. 使用默认镜像时，系统提示包含其 `org.workavera.sandbox.tools` 标签的内容，且容器停止时不会因此被启动；把 `sandbox.image` 换成没有该标签的镜像并重建后，系统提示改为要求先用命令确认工具。
 
 ## 16. 已确定的产品选择
 
