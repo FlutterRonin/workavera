@@ -22,12 +22,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
   existing resource; a message can carry up to six files, with or without
   text. The assistant sees what was attached without the content and reads or
   searches the extracted text through new `resources_list`,
-  `resources_search`, and `resources_read` tools, which the MCP server offers
-  as well. On request, and only after approval, it can create a download link
-  for the original file that works for five minutes, and revoke it once an
-  external service has fetched the file; links can also be reviewed and
-  revoked from the Resources page. Deleting a resource leaves past messages
-  intact and marks their attachment as unavailable.
+  `resources_search`, and `resources_read_markdown` tools, which the MCP
+  server offers as well. On request, and only after approval, it can create a
+  download link for the original file that works for five minutes, and revoke
+  it once an external service has fetched the file; links can also be reviewed
+  and revoked from the Resources page. Deleting a resource leaves past
+  messages intact and marks their attachment as unavailable.
 
 - Reading has a discovery panel behind the sparkle button in its sidebar. It
   keeps a list of subscriptions the user owns, either an RSS or Atom feed of

@@ -206,7 +206,7 @@ function ToolCard({
   if (part.toolName === "resources_search") {
     return <ResourcesSearchToolCard part={part} />
   }
-  if (part.toolName === "resources_read") {
+  if (part.toolName === "resources_read_markdown") {
     return <ResourcesReadToolCard part={part} />
   }
   if (part.toolName === "resources_create_download_url") {

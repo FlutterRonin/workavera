@@ -453,7 +453,7 @@ Resources tools are registered in two groups, which determines where they are ex
 | --- | --- | --- | --- |
 | `resources_list` | `ForActor` | ✅ | ✅ |
 | `resources_search` | `ForActor` | ✅ | ✅ |
-| `resources_read` | `ForActor` | ✅ | ✅ |
+| `resources_read_markdown` | `ForActor` | ✅ | ✅ |
 | `resources_create_download_url` | `ForChat` | ✅ | ❌ |
 | `resources_revoke_download_url` | `ForChat` | ✅ | ❌ |
 
@@ -541,9 +541,9 @@ Example result:
 
 `offset` is a Unicode character offset into the converted Markdown, not a page, line, slide, or sheet position in the original file.
 
-### `resources_read`
+### `resources_read_markdown`
 
-Reads a resource's converted Markdown, never the source file's bytes.
+Reads the Markdown converted from a resource at upload, never the source file's bytes. Conversion can lose formatting, formulas, and images while the user still downloads the source file, so gaps in this text say nothing about the source file.
 
 Input:
 
@@ -766,7 +766,7 @@ Underlying parser errors, stacks, file paths, and third-party diagnostics are wr
 - Deleting a resource invalidates every download link pointing to it.
 - An invalid credential reveals nothing about whether a resource exists and gives no access to other resources.
 - Resource tool output enters the existing persisted tool history and can be read again by resource ID after context compaction.
-- `resources_list`, `resources_search`, and `resources_read` appear in the Workavera MCP Server's tool list, scoped to the API key's owner and unaffected by `allow_destructive`; the two download link tools do not appear in the MCP tool list.
+- `resources_list`, `resources_search`, and `resources_read_markdown` appear in the Workavera MCP Server's tool list, scoped to the API key's owner and unaffected by `allow_destructive`; the two download link tools do not appear in the MCP tool list.
 - The database contains only the `user_resources` and `resource_download_leases` collections, with no message relation collection.
 - Uploading `.html`/`.htm` produces Markdown that keeps headings, lists, tables, and links, with no scripts, styles, or inline `data:` images in the result; pages in non-UTF-8 encodings decode correctly; conversion makes no network requests.
 - Scanned PDFs, exact page reading, OCR, semantic search, Feed/Notebook, MHTML/Web Archive, ZIP, and provider file IDs are not mislabeled as supported in the first version.
@@ -785,7 +785,7 @@ This draft sets the following first-version rules, each of which can be adjusted
 8. **Resources uploaded from the input but never sent stay in the resource library**, with no draft state and no automatic cleanup. The cost is that users may accumulate files they did not realize they had uploaded.
 9. Converted Markdown is at most 8 MiB; uploads beyond that fail.
 10. Each Chat message references at most 6 resources, and resource-only messages without text are allowed.
-11. `resources_read` returns at most 100,000 characters per call and supports logically reading the full text through cursors.
+11. `resources_read_markdown` returns at most 100,000 characters per call and supports logically reading the full text through cursors.
 12. **Compiler mode with an on-disk compilation cache, a converter created on demand and closed after use, and a concurrency limit of 2.** With a cache hit, creating an instance takes only about 7 ms, so it is not kept resident: it uses no memory while idle, at most about 100 MiB per conversion in progress, and about 200 MiB at the ceiling; converting a 1.3 MB PDF takes about 0.3 seconds. That beats interpreter mode on startup, memory, and latency, so no switch to downgrade the execution mode is provided. The cost is a peak of about 550 MiB to compile on every cache miss, including the one after a container rebuild; warming in the background at startup moves that compilation into the startup phase. The cache is built at run time, so image and binary deployments behave the same, and nothing is warmed at build time. The concurrency limit of 2 assumes uploads are not frequent; it can be raised for more throughput, and the ceiling rises linearly with it.
 13. **Follow go-anydoc v0.3.1 onto the wazy runtime.** wazy descends from wazero and is also pure Go; on this workload it is faster and allocates orders of magnitude less, with about 7 ms to start on a cache hit and about 0.3 seconds to convert a 1.3 MB PDF. The cost is that it is young, maintained by a single author, and makes no API stability promise. It is acceptable because we maintain go-anydoc ourselves: the wazy version is pinned inside go-anydoc, and Workavera only depends on go-anydoc's `New`/`Convert`/`Close` interface. If wazy develops a problem we cannot accept, go-anydoc can switch back to wazero internally (v0.1.3 is the wazero implementation) with no change on the Workavera side.
 14. The first version does not support Feed, Jupyter, ZIP, MHTML/Web Archive, images, OCR, or reading by exact page, slide, or sheet range. HTML is supported through a separate html-to-markdown path: anydoc does not parse HTML, and the pure-Go conversion library adds only about 0.7 MB while reusing the existing `x/net/html`. The cost is that HTML conversion runs outside the wasm sandbox and cannot be interrupted mid-way, relying on the 6 MiB input limit and linear-time parsing to stay bounded.

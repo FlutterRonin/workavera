@@ -60,7 +60,7 @@ func TestFactoryRegistersOnlyProductionTools(t *testing.T) {
 		"docs_write_chunk",
 		"resources_list",
 		"resources_search",
-		"resources_read",
+		"resources_read_markdown",
 	} {
 		if !names[name] {
 			t.Fatalf("missing production tool %q in registry: %#v", name, names)

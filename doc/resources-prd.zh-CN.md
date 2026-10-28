@@ -453,7 +453,7 @@ Resources 工具分两组注册，暴露范围随之不同：
 | --- | --- | --- | --- |
 | `resources_list` | `ForActor` | ✅ | ✅ |
 | `resources_search` | `ForActor` | ✅ | ✅ |
-| `resources_read` | `ForActor` | ✅ | ✅ |
+| `resources_read_markdown` | `ForActor` | ✅ | ✅ |
 | `resources_create_download_url` | `ForChat` | ✅ | ❌ |
 | `resources_revoke_download_url` | `ForChat` | ✅ | ❌ |
 
@@ -541,9 +541,9 @@ Chat 中通过附件引用的资源已经在消息描述块里给出 ID，不需
 
 `offset` 是转换后 Markdown 的 Unicode 字符偏移，不表示原文件页码、行号、幻灯片或工作表位置。
 
-### `resources_read`
+### `resources_read_markdown`
 
-读取资源转换后的 Markdown，不读取源文件二进制。
+读取资源上传时转换出的 Markdown，不读取源文件二进制。转换可能丢失格式、公式和图片，而用户下载的仍是源文件，因此不能根据这份文本的缺失推断源文件有问题。
 
 输入：
 
@@ -766,7 +766,7 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - 删除资源会连带失效指向它的全部下载链接。
 - 无效凭证不能推断资源是否存在，也不能访问其他资源。
 - 资源工具输出进入现有持久化工具历史，并能在上下文压缩后按资源 ID 重新读取。
-- `resources_list`、`resources_search`、`resources_read` 出现在 Workavera MCP Server 的工具列表中，权限范围是 API key 的 Owner，且不受 `allow_destructive` 影响；两个下载链接工具不出现在 MCP 工具列表中。
+- `resources_list`、`resources_search`、`resources_read_markdown` 出现在 Workavera MCP Server 的工具列表中，权限范围是 API key 的 Owner，且不受 `allow_destructive` 影响；两个下载链接工具不出现在 MCP 工具列表中。
 - 数据库中只存在 `user_resources` 和 `resource_download_leases` 两张集合，没有消息关系表。
 - `.html`/`.htm` 上传后得到保留标题、列表、表格和链接的 Markdown，脚本、样式和 `data:` 内联图片不出现在结果中；非 UTF-8 编码的页面正确解码；转换过程不发出任何网络请求。
 - 扫描 PDF、精确页码读取、OCR、语义搜索、Feed/Notebook、MHTML/Web Archive、ZIP 和 Provider file ID 不被第一版误标为已支持。
@@ -785,7 +785,7 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 8. **在输入框上传成功但未发送的资源直接留在资源库**，不做草稿态和自动清理。代价是用户可能积累一些自己没意识到上传过的文件。
 9. 转换 Markdown 最大 8 MiB；超过时上传失败。
 10. 每条 Chat 消息最多引用 6 个资源，并允许没有文字的纯资源消息。
-11. `resources_read` 单次最多返回 100,000 字符，通过 cursor 实现逻辑全文读取。
+11. `resources_read_markdown` 单次最多返回 100,000 字符，通过 cursor 实现逻辑全文读取。
 12. **编译器模式配磁盘编译缓存，转换器按需创建、用完关闭，并发上限 2。** 缓存命中时创建实例只需约 7 ms，因此不常驻：空闲时不占内存，转换期间每路最多约 100 MiB，天花板约 200 MiB；转换 1.3 MB 的 PDF 约 0.3 秒——在启动、内存和延迟三方面都优于解释器模式，因此不提供运行模式的降级开关。代价是每次缓存未命中需要约 550 MiB 峰值来完成编译，包括重建容器之后的那一次；启动后台预热把这次编译放在启动阶段。缓存在运行时构建，镜像部署和二进制部署行为一致，不做构建期预热。并发上限 2 是按"上传不是高频操作"设的，需要更高吞吐时上调，天花板随之线性上升。
 13. **跟随 go-anydoc v0.3.1 使用 wazy 运行时。** wazy 源自 wazero，同样纯 Go，在这类工作负载上更快、分配少几个数量级，编译缓存命中后启动约 7 ms、转换 1.3 MB 的 PDF 约 0.3 秒。代价是它很年轻、单作者维护、没有 API 稳定承诺。可以接受的原因是 go-anydoc 由我们自己维护：wazy 版本在 go-anydoc 中锁定，Workavera 只依赖 go-anydoc 的 `New`/`Convert`/`Close` 接口；若 wazy 出现无法接受的问题，可以在 go-anydoc 内换回 wazero（v0.1.3 即是 wazero 实现），Workavera 侧不需要改动。
 14. 第一版不支持 Feed、Jupyter、ZIP、MHTML/Web Archive、图片、OCR 和精确页/幻灯片/工作表范围读取。HTML 通过独立的 html-to-markdown 路径支持：anydoc 不解析 HTML，而纯 Go 转换库只增加约 0.7 MB，且复用已有的 `x/net/html`。代价是 HTML 转换不在 wasm 沙箱内、不能中途中断，靠 6 MiB 输入上限和线性解析保证有界。
