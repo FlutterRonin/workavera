@@ -188,6 +188,7 @@ task release    # 交叉编译发布压缩包到 dist/
 | Docs | [Docs PRD](./doc/docs-prd.md) | [Docs PRD](./doc/docs-prd.zh-CN.md) |
 | MCP 客户端 | [MCP Client Integration PRD](./doc/mcp-client-prd.md) | [MCP 客户端集成 PRD](./doc/mcp-client-prd.zh-CN.md) |
 | Resources | [Resources PRD](./doc/resources-prd.md) | [Resources PRD](./doc/resources-prd.zh-CN.md) |
+| Sandbox | [Sandbox PRD](./doc/sandbox-prd.md) | [Sandbox PRD](./doc/sandbox-prd.zh-CN.md) |
 
 ## 更新日志
 

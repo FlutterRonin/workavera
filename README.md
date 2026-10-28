@@ -191,6 +191,7 @@ All tasks are defined in [`Taskfile.yml`](./Taskfile.yml); frontend-only command
 | Docs | [Docs PRD](./doc/docs-prd.md) | [Docs PRD](./doc/docs-prd.zh-CN.md) |
 | MCP Client | [MCP Client Integration PRD](./doc/mcp-client-prd.md) | [MCP 客户端集成 PRD](./doc/mcp-client-prd.zh-CN.md) |
 | Resources | [Resources PRD](./doc/resources-prd.md) | [Resources PRD](./doc/resources-prd.zh-CN.md) |
+| Sandbox | [Sandbox PRD](./doc/sandbox-prd.md) | [Sandbox PRD](./doc/sandbox-prd.zh-CN.md) |
 
 ## Changelog
 
