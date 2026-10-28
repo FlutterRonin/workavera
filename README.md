@@ -182,6 +182,8 @@ All tasks are defined in [`Taskfile.yml`](./Taskfile.yml); frontend-only command
 | Chat | [Chat PRD and Fantasy architecture](./doc/chat-fantasy-plan.md) | [Chat PRD 与 Fantasy 架构](./doc/chat-fantasy-plan.zh-CN.md) |
 | Chat Memory | [Chat Memory PRD](./doc/chat-memory-prd.md) | [Chat 记忆 PRD](./doc/chat-memory-prd.zh-CN.md) |
 | Docs | [Docs PRD](./doc/docs-prd.md) | [Docs PRD](./doc/docs-prd.zh-CN.md) |
+| MCP Client | [MCP Client Integration PRD](./doc/mcp-client-prd.md) | [MCP 客户端集成 PRD](./doc/mcp-client-prd.zh-CN.md) |
+| Resources | [Resources PRD](./doc/resources-prd.md) | [Resources PRD](./doc/resources-prd.zh-CN.md) |
 
 ## Changelog
 
