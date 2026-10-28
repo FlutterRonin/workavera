@@ -60,7 +60,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	assetsFS, err := fs.Sub(distFS, "assets")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	app.OnServe().BindFunc(func(event *core.ServeEvent) error {
+		// Built assets never fall back to index.html: a missing chunk from an
+		// older build must fail as a 404 rather than load HTML as a script.
+		event.Router.GET("/assets/{path...}", apis.Static(assetsFS, false))
 		event.Router.GET("/{path...}", apis.Static(distFS, true))
 
 		return event.Next()

@@ -83,6 +83,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A page left open while the server was upgraded no longer fails to open other
+  parts of the app with a module-loading error. It now reloads once onto the
+  new version, and the server answers requests for build files that no longer
+  exist with a 404 instead of the app's HTML page.
 - Picking a different item in the reading list works again. The selection was
   being restored from the address bar a moment after the click and snapped back
   to the item that was open before, which left the list stuck on one entry as
