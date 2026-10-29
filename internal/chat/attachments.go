@@ -67,16 +67,16 @@ func (m submittedUserMessage) canonicalParts(app core.App, ownerID string) ([]wo
 	}
 	parts := make([]workagent.Part, 0, len(snapshots)+len(m.texts))
 	for _, snapshot := range snapshots {
-		parts = append(parts, workagent.Part{
-			"type": "data-resource",
-			"id":   snapshot.ResourceID,
-			"data": map[string]any{
-				"resourceId": snapshot.ResourceID,
-				"name":       snapshot.Name,
-				"mediaType":  snapshot.MediaType,
-				"size":       snapshot.Size,
-			},
-		})
+		data := map[string]any{
+			"resourceId": snapshot.ResourceID,
+			"name":       snapshot.Name,
+			"mediaType":  snapshot.MediaType,
+			"size":       snapshot.Size,
+		}
+		if resources.IsBinary(snapshot.MediaType) {
+			data["binary"] = true
+		}
+		parts = append(parts, workagent.Part{"type": "data-resource", "id": snapshot.ResourceID, "data": data})
 	}
 	return append(parts, m.texts...), nil
 }

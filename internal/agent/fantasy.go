@@ -14,10 +14,29 @@ import (
 )
 
 const (
-	maxAgentSteps        = 12
+	defaultAgentSteps    = 80
 	maxAgentOutputTokens = 16384
 	modelUserAgent       = "Workavera (https://workavera.com)"
 )
+
+// finalStepNotice tells the model why the last step of a run has no tools,
+// so it reports where the work stands instead of stopping silently.
+const finalStepNotice = "\n\nThis is the last step of this response: tools are unavailable now. Without calling any tool, tell the user what has been done, what is left, and where any results are, so they can ask you to continue."
+
+// finalStepWithoutTools forbids tool calls on the last step a run may take,
+// so a run that reaches the step limit still ends with an answer. The tools
+// stay declared, which keeps earlier tool calls in the history valid for
+// every provider.
+func finalStepWithoutTools(maxSteps int, systemPrompt string) fantasy.PrepareStepFunction {
+	return func(ctx context.Context, options fantasy.PrepareStepFunctionOptions) (context.Context, fantasy.PrepareStepResult, error) {
+		if options.StepNumber < maxSteps-1 {
+			return ctx, fantasy.PrepareStepResult{}, nil
+		}
+		none := fantasy.ToolChoiceNone
+		system := systemPrompt + finalStepNotice
+		return ctx, fantasy.PrepareStepResult{ToolChoice: &none, System: &system}, nil
+	}
+}
 
 func agentOptions(maxSteps int, maxOutputTokens int64) []fantasy.AgentOption {
 	return []fantasy.AgentOption{
@@ -81,7 +100,11 @@ func (r *FantasyRunner) Stream(ctx context.Context, request Request, emit EmitFu
 		return Result{}, err
 	}
 
-	opts := agentOptions(maxAgentSteps, effectiveMaxOutputTokens(request.Model))
+	maxSteps := request.MaxSteps
+	if maxSteps <= 0 {
+		maxSteps = defaultAgentSteps
+	}
+	opts := agentOptions(maxSteps, effectiveMaxOutputTokens(request.Model))
 	if r.toolFactory != nil {
 		opts = append(opts, fantasy.WithTools(r.toolFactory(ToolScope{
 			ActorID:        request.ActorID,
@@ -92,6 +115,7 @@ func (r *FantasyRunner) Stream(ctx context.Context, request Request, emit EmitFu
 	if request.SystemPrompt != "" {
 		opts = append(opts, fantasy.WithSystemPrompt(request.SystemPrompt))
 	}
+	opts = append(opts, fantasy.WithPrepareStep(finalStepWithoutTools(maxSteps, request.SystemPrompt)))
 	fantasyAgent := fantasy.NewAgent(model, opts...)
 	messages, err := toFantasyMessages(request.Messages)
 	if err != nil {

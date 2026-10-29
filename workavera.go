@@ -26,6 +26,7 @@ import (
 	"github.com/xusenlin/workavera/internal/preferences"
 	"github.com/xusenlin/workavera/internal/reading"
 	"github.com/xusenlin/workavera/internal/resources"
+	"github.com/xusenlin/workavera/internal/sandbox"
 	_ "github.com/xusenlin/workavera/migrations"
 )
 
@@ -43,6 +44,7 @@ func main() {
 	docs.Register(app)
 	reading.Register(app)
 	resources.Register(app)
+	sandbox.Register(app)
 	llm.Register(app)
 	mcpclient.Register(app, version)
 	mcpserver.Register(app, version)

@@ -37,7 +37,7 @@ func TestUserResourcesMigration(t *testing.T) {
 		t.Fatalf("sha256 must be hidden: %#v", hash)
 	}
 	markdown, ok := resources.Fields.GetByName("converted_markdown").(*core.TextField)
-	if !ok || !markdown.Required || markdown.Max != userResourceMaxMarkdownSize {
+	if !ok || markdown.Max != userResourceMaxMarkdownSize {
 		t.Fatalf("unexpected converted_markdown field: %#v", markdown)
 	}
 	owner, ok := resources.Fields.GetByName("owner").(*core.RelationField)

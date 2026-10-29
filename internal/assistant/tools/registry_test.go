@@ -14,6 +14,7 @@ import (
 
 	workagent "github.com/xusenlin/workavera/internal/agent"
 	"github.com/xusenlin/workavera/internal/preferences"
+	"github.com/xusenlin/workavera/internal/sandbox"
 	_ "github.com/xusenlin/workavera/migrations"
 )
 
@@ -115,8 +116,8 @@ func TestMemoryToolsAreChatOnlyAndPreferenceGated(t *testing.T) {
 	if disabled["system_memory_upsert"] || disabled["system_memory_forget"] {
 		t.Fatalf("disabled Chat memory added memory tools: %v", disabled)
 	}
-	if len(disabled) != len(base)+2 || !disabled["resources_create_download_url"] || !disabled["resources_revoke_download_url"] {
-		t.Fatalf("Chat must add exactly the resource download link tools: %v", disabled)
+	if len(disabled) != len(base)+3 || !disabled["resources_create_download_url"] || !disabled["resources_revoke_download_url"] || !disabled["chat_send_files"] {
+		t.Fatalf("Chat must add exactly the resource download link tools and chat_send_files: %v", disabled)
 	}
 
 	preference, err := app.FindFirstRecordByFilter(preferences.CollectionName, "owner = {:owner}", dbx.Params{"owner": user.Id})
@@ -269,5 +270,53 @@ func TestDocsMoveRequiresExplicitUserRequest(t *testing.T) {
 		if !slices.Contains(info.Required, field) {
 			t.Fatalf("docs_move missing required field %q: %#v", field, info.Required)
 		}
+	}
+}
+
+func TestSandboxToolsAreChatOnlyAndPreferenceGated(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Cleanup()
+	sandbox.Register(app)
+	users, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := core.NewRecord(users)
+	user.SetEmail("sandbox-tools@example.com")
+	user.SetPassword("password123")
+	user.Set("name", "Sandbox Tools")
+	if err := app.Save(user); err != nil {
+		t.Fatal(err)
+	}
+	factory := NewFactory(app)
+	sandboxNames := func(tools []fantasy.AgentTool) []string {
+		var names []string
+		for _, tool := range tools {
+			if strings.HasPrefix(tool.Info().Name, "sandbox_") {
+				names = append(names, tool.Info().Name)
+			}
+		}
+		return names
+	}
+
+	if names := sandboxNames(factory.ForChat(workagent.ToolScope{ActorID: user.Id})); len(names) != 0 {
+		t.Fatalf("a sandbox that is off must add no tools: %v", names)
+	}
+	if _, err := preferences.Set(app, user.Id, "sandbox_enabled", true); err != nil {
+		t.Fatal(err)
+	}
+	if names := sandboxNames(factory.ForActor(user.Id)); len(names) != 0 {
+		t.Fatalf("sandbox tools must never reach MCP or API keys: %v", names)
+	}
+	names := sandboxNames(factory.ForChat(workagent.ToolScope{ActorID: user.Id}))
+	if sandbox.For(app).ToolsEnabled(context.Background(), user.Id) {
+		if len(names) != 6 {
+			t.Fatalf("an available sandbox must add its six tools: %v", names)
+		}
+	} else if len(names) != 0 {
+		t.Fatalf("an unavailable sandbox must add no tools: %v", names)
 	}
 }

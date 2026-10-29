@@ -144,11 +144,32 @@ By default it listens on <http://127.0.0.1:8090>. Pass `--http=0.0.0.0:8090` to 
 
 The demo user is seeded only when the `users` collection is empty, so upgrades do not add or overwrite an account in an existing workspace.
 
+Instance-wide settings live in the `configs` collection, which only superusers can edit in the PocketBase dashboard. Besides the [sandbox](#sandbox) keys, `chat.max_steps` (default `80`, from 2 to 500) caps the model calls of one Chat response; the last one cannot call tools, so a response that reaches the cap still ends with a summary.
+
 ### Memory for file conversion
 
 Resources converts uploaded documents with an embedded WebAssembly module that is compiled to native code once and cached in `anydoc_cache/` next to `pb_data`. That compilation briefly needs about **550 MB** of memory and runs in the background right after startup: on first deployment, after an upgrade, on a new CPU, and after a container is rebuilt. Size the host for that peak, not for the near-zero usage while idle; each conversion in progress then needs up to about 100 MB. If the compilation cannot run, the rest of Workavera still works and only resource uploads are unavailable. The cache holds no user data and is safe to delete, which only costs one recompilation.
 
 Download links the assistant creates for resources are only issued when the server's Application URL (PocketBase settings) uses HTTPS.
+
+### Sandbox
+
+The sandbox gives each user who turns it on in Settings a Linux container of their own (`workavera-<user ID>`, with `/workspace` in a named volume) where the Chat assistant runs commands, writes Python and Node scripts, and moves files to and from Resources and Docs. It needs:
+
+- **Workavera running directly on the host** as the prebuilt binary, not in the Docker image. When Workavera runs in a container, the sandbox is refused: reaching Docker from there means mounting the host's Docker socket or running Docker-in-Docker with `--privileged`, and either hands the whole host to a network-facing service. The official image therefore keeps no Docker CLI.
+- **Docker on the host**, with a `docker` command on the `PATH` that the system user running Workavera may use. On Linux that usually means the `docker` group, which is equivalent to root, so prefer a dedicated host or VM, or rootless Docker.
+
+The image `ghcr.io/xusenlin/workavera-sandbox` (from [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox)) is pulled on first use. Superusers control the sandbox in the PocketBase dashboard (`/_/`) through these records of the `configs` collection; invalid values are refused on save:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `sandbox.enabled` | `true` | Master switch; `false` stops every sandbox container |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | Image for new and rebuilt containers, e.g. a mirror |
+| `sandbox.network` | `true` | Network master switch; `false` takes every sandbox offline |
+| `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | Per-container limits, applied to existing containers at once |
+| `sandbox.idle_timeout_minutes` | `60` | Stop a container after this long without use; `0` never stops it |
+
+Security notes: containers share the host kernel and are no boundary for malicious code, so put an instance open to untrusted users on its own host or VM. A sandbox with network access can reach ports published on the host, the local network, and cloud metadata endpoints such as `169.254.169.254`; restrict the `workavera-sandbox` network with a firewall or turn `sandbox.network` off. Disk use has no quota, so watch the disk that holds Docker's data. `docker ps -a --filter label=workavera.sandbox=1` lists every sandbox.
 
 ## Product areas
 
@@ -159,7 +180,8 @@ One line each; the [product documentation](#product-documentation) below carries
 - **Calendar** combines personal events and visible Board deadlines in one view, with recurrence and in-app reminders.
 - **Chat** is where you work with the model: durable streaming conversations that survive browser disconnects, with visible reasoning and tool calls, automatic compaction of long conversations, and optional long-term memory that is off by default.
 - **Reading** saves external links and notes with projects, tags, read state, and AI summaries.
-- **Resources** keeps the files you upload (PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, and JSON) and their extracted text, so Chat can attach them with `+` or `#` and the assistant can search and read them.
+- **Resources** keeps the files you upload (PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, JSON, images, and ZIP archives) and the extracted text of documents, so Chat can attach them with `+` or `#` and the assistant can search and read them.
+- **Sandbox** gives each user an optional Linux container in which the assistant runs commands and scripts and exchanges files with Resources and Docs; see [Sandbox](#sandbox) for its requirements.
 - **Contacts** provides a searchable team contact list with personal favorites.
 - **Dashboard, Notifications, and Settings** cover the workspace overview, the in-app notification inbox, model configuration and sharing, appearance, and profile.
 

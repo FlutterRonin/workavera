@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/pocketbase/dbx v1.12.0
+	github.com/pocketbase/ozzo-validation/v4 v4.3.0
 	github.com/pocketbase/pocketbase v0.40.6
 	github.com/xusenlin/go-anydoc v0.3.1
 	golang.org/x/net v0.61.0
@@ -70,7 +71,6 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
-	github.com/pocketbase/ozzo-validation/v4 v4.3.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/samyfodil/wazy v0.3.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

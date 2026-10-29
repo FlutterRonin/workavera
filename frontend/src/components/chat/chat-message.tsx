@@ -51,6 +51,7 @@ import {
   ResourcesRevokeToolCard,
   ResourcesSearchToolCard,
 } from "./resources-tool-output"
+import { SentFiles } from "./sent-files"
 import { ToolInput } from "./tool-input"
 
 /**
@@ -199,6 +200,12 @@ function ToolCard({
         )}
       </>
     )
+  }
+  if (
+    part.toolName === "chat_send_files" &&
+    part.state === "output-available"
+  ) {
+    return <SentFiles part={part} />
   }
   if (part.toolName === "resources_list") {
     return <ResourcesListToolCard part={part} />

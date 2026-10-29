@@ -1,6 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Collapsible,
   CollapsibleContent,
@@ -59,7 +60,7 @@ const statusLabels: Record<ToolPart["state"], string> = {
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
   "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
   "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
-  "input-available": <ClockIcon className="size-4 animate-pulse" />,
+  "input-available": <Spinner className="size-4" />,
   "input-streaming": <CircleIcon className="size-4" />,
   "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
   "output-denied": <XCircleIcon className="size-4 text-orange-600" />,

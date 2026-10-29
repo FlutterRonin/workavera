@@ -195,6 +195,9 @@ func Search(ctx context.Context, app core.App, ownerID, resourceID, query string
 	if err != nil {
 		return SearchResult{}, err
 	}
+	if err := requireText(record); err != nil {
+		return SearchResult{}, err
+	}
 
 	text := []rune(record.GetString("converted_markdown"))
 	windows := matchWindows(foldRunes(text), foldRunes(queryRunes))
@@ -219,6 +222,15 @@ func Search(ctx context.Context, app core.App, ownerID, resourceID, query string
 		result.Matches = append(result.Matches, SearchMatch{Offset: window.match, Excerpt: excerpt})
 	}
 	return result, nil
+}
+
+// requireText rejects binary resources, which have no Markdown to search or
+// read.
+func requireText(record *core.Record) error {
+	if IsBinary(record.GetString("media_type")) {
+		return newError(CodeResourceHasNoText, http.StatusUnprocessableEntity, "This file has no text representation. It can only be downloaded, or copied into the sandbox with sandbox_import and processed there.")
+	}
+	return nil
 }
 
 // foldRunes lowercases rune by rune, so indexes into the result are indexes
@@ -301,6 +313,9 @@ func Read(ctx context.Context, app core.App, ownerID, resourceID, cursor string,
 	maxChars = min(maxChars, maxReadChars)
 	record, err := findOwnedResource(app, ownerID, resourceID)
 	if err != nil {
+		return ReadResult{}, err
+	}
+	if err := requireText(record); err != nil {
 		return ReadResult{}, err
 	}
 	markdown := record.GetString("converted_markdown")

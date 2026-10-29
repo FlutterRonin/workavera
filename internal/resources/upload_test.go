@@ -142,7 +142,8 @@ func TestUploadRejectsInvalidFilesWithoutSavingAnything(t *testing.T) {
 		{"text disguised as pdf", "report.pdf", []byte("just some text"), CodeUnsupportedMediaType},
 		{"unsupported extension", "tool.exe", []byte("MZ\x90\x00"), CodeUnsupportedMediaType},
 		{"no extension", "README", []byte("hello"), CodeUnsupportedMediaType},
-		{"zip archive", "bundle.zip", []byte("PK\x03\x04"), CodeUnsupportedMediaType},
+		{"svg image", "drawing.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`), CodeUnsupportedMediaType},
+		{"zip disguised as png", "chart.png", []byte("PK\x03\x04"), CodeUnsupportedMediaType},
 		{"non utf-8 text", "notes.txt", gbk, CodeUnsupportedEncoding},
 		{"empty name", "   ", []byte("hello"), CodeInvalidFilename},
 		{"path only", "folder/", []byte("hello"), CodeInvalidFilename},
@@ -301,5 +302,70 @@ func TestSanitizeNameStripsPathsAndDisguises(t *testing.T) {
 		if got := sanitizeName(input); got != expected {
 			t.Errorf("sanitizeName(%q) = %q, want %q", input, got, expected)
 		}
+	}
+}
+
+func TestBinaryUploadsAreStoredWithoutText(t *testing.T) {
+	app := newTestApp(t)
+	owner := createTestUser(t, app, "resource-binary@example.com")
+	conv := newTestConverter(app, func(context.Context, []byte, string) (string, error) {
+		t.Fatal("binary uploads must not reach the converter")
+		return "", nil
+	})
+
+	cases := []struct {
+		file      string
+		data      []byte
+		mediaType string
+	}{
+		{"chart.png", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"), "image/png"},
+		{"photo.jpg", []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00"), "image/jpeg"},
+		{"photo.jpeg", []byte("\xff\xd8\xff\xe1\x00\x10Exif\x00"), "image/jpeg"},
+		{"loop.gif", []byte("GIF89a\x01\x00\x01\x00"), "image/gif"},
+		{"image.webp", []byte("RIFF\x24\x00\x00\x00WEBPVP8 "), "image/webp"},
+		{"bundle.zip", []byte("PK\x03\x04\x14\x00\x00\x00"), "application/zip"},
+	}
+	for _, test := range cases {
+		t.Run(test.file, func(t *testing.T) {
+			resource, err := Upload(context.Background(), app, conv, owner.Id, test.file, test.data)
+			if err != nil {
+				t.Fatalf("upload: %v", err)
+			}
+			if resource.MediaType != test.mediaType || resource.ConvertedSize != 0 || !IsBinary(resource.MediaType) {
+				t.Fatalf("unexpected binary resource: %#v", resource)
+			}
+			if _, err := Read(context.Background(), app, owner.Id, resource.ID, "", 0); errorCode(err) != CodeResourceHasNoText {
+				t.Fatalf("reading a binary resource: expected %s, got %v", CodeResourceHasNoText, err)
+			}
+			if _, err := Search(context.Background(), app, owner.Id, resource.ID, "PK", 0); errorCode(err) != CodeResourceHasNoText {
+				t.Fatalf("searching a binary resource: expected %s, got %v", CodeResourceHasNoText, err)
+			}
+		})
+	}
+
+	list, err := List(context.Background(), app, owner.Id, "chart", 0)
+	if err != nil || len(list.Resources) != 1 || list.Resources[0].MatchedIn != "name" {
+		t.Fatalf("binary resources must still match by name: %#v %v", list, err)
+	}
+}
+
+func TestSaveUsesTheRegisteredConverterAndDisplayName(t *testing.T) {
+	app := newTestApp(t)
+	owner := createTestUser(t, app, "resource-save@example.com")
+	if _, err := Save(context.Background(), app, owner.Id, "out.txt", "", []byte("hello")); errorCode(err) != CodeConversionFailed {
+		t.Fatalf("without a registered converter Save must fail, got %v", err)
+	}
+	app.Store().Set(converterStoreKey, newTestConverter(app, nil))
+
+	resource, err := Save(context.Background(), app, owner.Id, "out.txt", "Quarterly numbers", []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resource.DisplayName != "Quarterly numbers" || resource.OriginalName != "out.txt" || resource.MediaType != "text/plain" {
+		t.Fatalf("unexpected saved resource: %#v", resource)
+	}
+	again, err := Save(context.Background(), app, owner.Id, "out.txt", "Another name", []byte("hello"))
+	if err != nil || again.ID != resource.ID || again.DisplayName != "Quarterly numbers" {
+		t.Fatalf("saving the same file again must return the existing resource unchanged: %#v %v", again, err)
 	}
 }

@@ -15,6 +15,8 @@ type Preferences struct {
 	Theme             string `json:"theme"`
 	MemoryEnabled     bool   `json:"memory_enabled"`
 	MemoryAutoCapture bool   `json:"memory_auto_capture"`
+	SandboxEnabled    bool   `json:"sandbox_enabled"`
+	SandboxOffline    bool   `json:"sandbox_offline"`
 	Created           string `json:"created"`
 	Updated           string `json:"updated"`
 }
@@ -78,7 +80,27 @@ func fromRecord(record *core.Record) Preferences {
 		Theme:             theme,
 		MemoryEnabled:     record.GetBool("memory_enabled"),
 		MemoryAutoCapture: record.GetBool("memory_auto_capture"),
+		SandboxEnabled:    record.GetBool("sandbox_enabled"),
+		SandboxOffline:    record.GetBool("sandbox_offline"),
 		Created:           record.GetDateTime("created").String(),
 		Updated:           record.GetDateTime("updated").String(),
 	}
+}
+
+// Set saves one preference field on the owner's record, creating the record
+// first if needed. It bypasses the Records API rules, so callers own the
+// checks that field needs.
+func Set(app core.App, ownerID, field string, value any) (Preferences, error) {
+	if _, err := Ensure(app, ownerID); err != nil {
+		return Preferences{}, err
+	}
+	record, err := app.FindFirstRecordByFilter(CollectionName, "owner = {:owner}", dbx.Params{"owner": ownerID})
+	if err != nil {
+		return Preferences{}, err
+	}
+	record.Set(field, value)
+	if err := app.Save(record); err != nil {
+		return Preferences{}, err
+	}
+	return fromRecord(record), nil
 }

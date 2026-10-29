@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -311,5 +312,17 @@ func TestMultiStepToolCallRebuild(t *testing.T) {
 	}
 	if textPart, ok := messages[2].Content[1].(fantasy.TextPart); !ok || textPart.Text != "南京下雨，记得带伞。" {
 		t.Fatalf("msg[2] part[1] should be final text, got %#v", messages[2].Content[1])
+	}
+}
+
+func TestResourceAttachmentTextMarksBinaryFiles(t *testing.T) {
+	part := Part{"type": "data-resource", "data": map[string]any{"resourceId": "r1", "name": "chart.png", "mediaType": "image/png", "size": float64(10), "binary": true}}
+	text := ResourceAttachmentText(part)
+	if !strings.Contains(text, "no text representation") || strings.Contains(text, "call the Resources tools") {
+		t.Fatalf("a binary attachment must say it has no text: %s", text)
+	}
+	delete(part["data"].(map[string]any), "binary")
+	if text := ResourceAttachmentText(part); !strings.Contains(text, "call the Resources tools") {
+		t.Fatalf("a text attachment must point to the Resources tools: %s", text)
 	}
 }

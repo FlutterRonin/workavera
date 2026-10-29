@@ -56,7 +56,7 @@ A resource's lifecycle is independent of Chat. A message only stores the resourc
 7. Resource names, types, and sizes submitted by the client are untrusted. When creating a message, the server checks ownership by resource ID and rebuilds the canonical snapshot from the current resource record.
 8. After a message is sent, its resource references and display snapshots cannot change; later renames of a resource are not written back to past messages.
 9. The owner can delete a resource at any time, whether or not a message references it. After deletion, past messages keep their snapshot and the UI marks it as unavailable.
-10. Conversion completes synchronously inside the upload request. An upload whose conversion fails fails as a whole: no resource record is created and no source file is kept. The failure reason is only returned in the HTTP response and is not persisted.
+10. Conversion completes synchronously inside the upload request. An upload whose conversion fails fails as a whole: no resource record is created and no source file is kept. The failure reason is only returned in the HTTP response and is not persisted. Binary resources (see "Binary resources" in section 5) are never converted and are stored without Markdown.
 11. The Assistant's search and read tools only use the stored `converted_markdown` and never re-run conversion on the source file at tool call time.
 12. The Assistant can only read resources as the currently authenticated user; a resource ID supplied by the model is never the basis for permission.
 13. A temporary download URL is a bearer credential. Whoever holds the URL can download the source file without signing in to Workavera until it expires, so creating one must be short-lived, restricted, revocable, and auditable.
@@ -120,9 +120,27 @@ Constraints:
 - Conversion runs in the main process, without a wasm sandbox, and cannot be interrupted mid-way through a context the way a wasm guest can (the library accepts a context but never checks for cancellation). It is bounded by its input: with the 6 MiB limit and linear-time HTML parsing, the time and memory of one conversion grow linearly with the input. HTML conversion also holds the conversion semaphore, so it cannot stack with go-anydoc conversions beyond the memory budget;
 - Bundle formats such as `.mhtml` and `.webarchive` are not part of this path and remain unsupported.
 
+### Binary resources
+
+Images and ZIP archives, most often produced in the [sandbox](./sandbox-prd.md), are stored as binary resources. The rules are the same for user uploads and sandbox exports.
+
+| Kind | Extensions | Media type |
+| --- | --- | --- |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
+| Archive | `.zip` | `application/zip` |
+
+- No converter runs: `converted_markdown` is an empty string and `converted_size` is 0. Whether a resource is binary follows from its server-detected `media_type`; there is no separate field.
+- The 6 MiB limit, real media type detection, SHA-256 deduplication, owner isolation, and download lease rules all apply unchanged.
+- SVG is not supported: it is XML that can run scripts, which is an XSS risk when the protected file is opened in the browser.
+- ZIP archives are stored and downloaded as a whole, never unpacked or read. The ZIP signature also opens OOXML and EPUB files, which the detector names first; such a file uploaded as `.zip` is still a ZIP archive.
+- PDFs with image-only pages are still rejected with `document_needs_ocr`; a chart is delivered as the image itself.
+- `resources_list` matches binary resources by name only. `resources_search` and `resources_read_markdown` return `resource_has_no_text` for them, explaining that the file can only be downloaded or copied into the sandbox with `sandbox_import`.
+- When a binary resource is attached in Chat, the metadata block the model sees says the file has no text representation.
+- The Resources page hides "View extracted text" for binary resources; renaming, downloading, deleting, and attaching to Chat are unchanged.
+
 ### Unsupported formats
 
-The first version does not accept XML/RSS/Atom, Jupyter Notebook, ZIP, MHTML/Web Archive, images, audio, video, executables, or any other format not listed above.
+The first version does not accept XML/RSS/Atom, Jupyter Notebook, MHTML/Web Archive, SVG and other images not listed above, audio, video, executables, or any other format not listed above.
 
 ## 6. Data model
 
@@ -137,13 +155,13 @@ The first version does not accept XML/RSS/Atom, Jupyter Notebook, ZIP, MHTML/Web
 | `media_type` | text | Media type detected and normalized by the server, immutable after creation |
 | `size` | number | Source file byte count confirmed by the server, immutable after creation |
 | `sha256` | hidden text | SHA-256 of the source file, immutable after creation |
-| `converted_markdown` | text | Full Markdown from conversion or pass-through, at most 8 MiB, immutable after creation |
+| `converted_markdown` | text | Full Markdown from conversion or pass-through, at most 8 MiB, immutable after creation; empty for binary resources |
 | `converted_size` | number | UTF-8 byte count of the Markdown |
 | `created`, `updated` | autodate | Record timestamps |
 
 `sha256 + original_name` is unique per owner. Uploading the same content with the same original file name reuses the existing resource. The same content under a different original file name is a different resource, so users never accidentally merge files that mean different things.
 
-A record always has both a source file and a non-empty `converted_markdown`. An upload whose conversion fails never reaches the database, so there is no "exists but unusable" intermediate state, and readers never need to check a status.
+A record always has a source file, and every resource except a binary one has a non-empty `converted_markdown`. An upload whose conversion fails never reaches the database, so there is no "exists but unusable" intermediate state, and readers never need to check a status.
 
 Apart from `display_name`, a resource record never changes after creation. Issuing and revoking download links never writes to this collection, so `updated` always reflects what the user did to the resource itself.
 
@@ -643,6 +661,17 @@ The Assistant has no reliable clock: the system prompt provides only the current
 - When the user asks whether a link is still valid, it says honestly that it cannot tell, and suggests generating a new one or checking the Resources page;
 - Results of the create tool are persisted with the conversation history, so a URL in the history remains a usable credential until it expires. That is exactly why it must be revoked promptly, and why the UI must not render links in past tool cards as ordinary clickable links.
 
+### `chat_send_files`
+
+Shows the user up to 6 of their resources or documents as file cards in the reply. It is how the Assistant delivers a file it produced, such as an image or document exported from the sandbox, or a file the user asks to see, instead of telling the user where to look.
+
+- Input: `files`, 1 to 6 distinct items of `{ "kind": "resource" | "doc", "id" }`.
+- Resources must be the user's own; documents follow the Docs visibility rules, including project documents shared with the user. One item that does not resolve fails the whole call with `resource_not_found` or `document_not_found`.
+- The name, media type, size, and document kind come from the stored records, never from the model.
+- Chat-only (`ForChat`), never in `ForActor`, the MCP server, or API keys. It needs no approval: the files stay inside Workavera and are only shown to their own user, unlike download links.
+- The UI renders the result as an attachment group, not a tool card: images show a 480-pixel-wide thumbnail (the `480x0` thumb of `user_resources.file`, fetched with a file token) that opens a larger preview with a download button; other resources use the attachment card with open and download; documents link to Docs. A file deleted later shows as unavailable, like an attached file.
+- The system prompt tells the Assistant to send only final files, not intermediate ones, and then reply briefly without repeating paths, IDs, or links.
+
 ## 11. Tool results and context behavior
 
 Resource search and read results are persisted as existing `dynamic-tool` parts, so the same uncompacted conversation history can keep using content that was already read, and the Assistant does not need to call the tools again every turn.
@@ -725,7 +754,8 @@ Underlying parser errors, stacks, file paths, and third-party diagnostics are wr
 - Files of 0 bytes or larger than 6,291,456 bytes are always rejected.
 - The server detects MIME types from content and rejects disguised extensions and unsupported formats.
 - Plain text formats skip the converter and are stored unchanged as Markdown; non-UTF-8 text is rejected.
-- A successful resource stores the protected source file, metadata, SHA-256, and non-empty converted Markdown together.
+- A successful resource stores the protected source file, metadata, SHA-256, and non-empty converted Markdown together; a binary resource stores no Markdown.
+- Uploading PNG, JPEG, GIF, WebP, and ZIP files succeeds and `resources_read_markdown` returns `resource_has_no_text` for them; uploading SVG is rejected.
 - When conversion fails, times out, or produces empty or oversized output, the upload fails as a whole, leaves no resource record or orphaned file, and returns a stable error code.
 - PDFs with scanned pages (whether all or only some pages) are rejected at upload, with the pages that need OCR clearly stated.
 - Encrypted and corrupt documents return error codes that differ from each other and from "unsupported format".
@@ -769,7 +799,7 @@ Underlying parser errors, stacks, file paths, and third-party diagnostics are wr
 - `resources_list`, `resources_search`, and `resources_read_markdown` appear in the Workavera MCP Server's tool list, scoped to the API key's owner and unaffected by `allow_destructive`; the two download link tools do not appear in the MCP tool list.
 - The database contains only the `user_resources` and `resource_download_leases` collections, with no message relation collection.
 - Uploading `.html`/`.htm` produces Markdown that keeps headings, lists, tables, and links, with no scripts, styles, or inline `data:` images in the result; pages in non-UTF-8 encodings decode correctly; conversion makes no network requests.
-- Scanned PDFs, exact page reading, OCR, semantic search, Feed/Notebook, MHTML/Web Archive, ZIP, and provider file IDs are not mislabeled as supported in the first version.
+- Scanned PDFs, exact page reading, OCR, semantic search, Feed/Notebook, MHTML/Web Archive, SVG, and provider file IDs are not mislabeled as supported in the first version.
 
 ## 16. Product choices to confirm in this draft
 
@@ -788,5 +818,5 @@ This draft sets the following first-version rules, each of which can be adjusted
 11. `resources_read_markdown` returns at most 100,000 characters per call and supports logically reading the full text through cursors.
 12. **Compiler mode with an on-disk compilation cache, a converter created on demand and closed after use, and a concurrency limit of 2.** With a cache hit, creating an instance takes only about 7 ms, so it is not kept resident: it uses no memory while idle, at most about 100 MiB per conversion in progress, and about 200 MiB at the ceiling; converting a 1.3 MB PDF takes about 0.3 seconds. That beats interpreter mode on startup, memory, and latency, so no switch to downgrade the execution mode is provided. The cost is a peak of about 550 MiB to compile on every cache miss, including the one after a container rebuild; warming in the background at startup moves that compilation into the startup phase. The cache is built at run time, so image and binary deployments behave the same, and nothing is warmed at build time. The concurrency limit of 2 assumes uploads are not frequent; it can be raised for more throughput, and the ceiling rises linearly with it.
 13. **Follow go-anydoc v0.3.1 onto the wazy runtime.** wazy descends from wazero and is also pure Go; on this workload it is faster and allocates orders of magnitude less, with about 7 ms to start on a cache hit and about 0.3 seconds to convert a 1.3 MB PDF. The cost is that it is young, maintained by a single author, and makes no API stability promise. It is acceptable because we maintain go-anydoc ourselves: the wazy version is pinned inside go-anydoc, and Workavera only depends on go-anydoc's `New`/`Convert`/`Close` interface. If wazy develops a problem we cannot accept, go-anydoc can switch back to wazero internally (v0.1.3 is the wazero implementation) with no change on the Workavera side.
-14. The first version does not support Feed, Jupyter, ZIP, MHTML/Web Archive, images, OCR, or reading by exact page, slide, or sheet range. HTML is supported through a separate html-to-markdown path: anydoc does not parse HTML, and the pure-Go conversion library adds only about 0.7 MB while reusing the existing `x/net/html`. The cost is that HTML conversion runs outside the wasm sandbox and cannot be interrupted mid-way, relying on the 6 MiB input limit and linear-time parsing to stay bounded.
+14. The first version does not support Feed, Jupyter, MHTML/Web Archive, SVG, OCR, or reading by exact page, slide, or sheet range. HTML is supported through a separate html-to-markdown path: anydoc does not parse HTML, and the pure-Go conversion library adds only about 0.7 MB while reusing the existing `x/net/html`. The cost is that HTML conversion runs outside the wasm sandbox and cannot be interrupted mid-way, relying on the 6 MiB input limit and linear-time parsing to stay bounded.
 15. **The read-only resource tools ship with MCP, while the download link tools stay in Chat only.** The read-only tools are treated the same as the Docs and Reading tools. A download link is a bearer credential, and creating one requires an approval that shows the target resource and purpose each time, which the MCP side has no interface for. The cost is that MCP clients cannot get the original source file and can only read the converted Markdown.

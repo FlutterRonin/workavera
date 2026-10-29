@@ -43,6 +43,7 @@ import {
 import {
   formatBytes,
   formatLabel,
+  isBinaryResource,
   openResourceFile,
   RESOURCE_ACCEPT,
   resourceErrorMessage,
@@ -193,7 +194,7 @@ export function ResourcesPage() {
           <p className="text-sm text-muted-foreground">
             {query.trim()
               ? "Try a different name."
-              : "Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, or JSON files up to 6 MB."}
+              : "Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, JSON, image, or ZIP files up to 6 MB."}
           </p>
         </div>
       ) : (
@@ -281,14 +282,16 @@ export function ResourcesPage() {
                           <HugeiconsIcon icon={Link04Icon} strokeWidth={2} />
                           Download links
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            setDialog({ kind: "preview", resource })
-                          }
-                        >
-                          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-                          View extracted text
-                        </DropdownMenuItem>
+                        {!isBinaryResource(resource.media_type) && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setDialog({ kind: "preview", resource })
+                            }
+                          >
+                            <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+                            View extracted text
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"

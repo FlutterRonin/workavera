@@ -28,6 +28,41 @@ and versions follow [Semantic Versioning](https://semver.org/).
   it once an external service has fetched the file; links can also be reviewed
   and revoked from the Resources page. Deleting a resource leaves past
   messages intact and marks their attachment as unavailable.
+- Resources also keeps PNG, JPEG, GIF, and WebP images and ZIP archives of up
+  to 6 MB. They are stored and downloaded as they are, without extracted text:
+  the assistant is told an attached image or archive has no text, and searching
+  or reading one reports `resource_has_no_text`. SVG stays unsupported, since
+  it can carry scripts.
+- The assistant can hand files to the user in Chat with a new
+  `chat_send_files` tool: up to six of the user's resources or documents appear
+  in its reply as file cards. Images show a thumbnail that opens a larger
+  preview with a download button, other files can be opened and downloaded,
+  and documents link to Docs. The cards are built from the stored records,
+  only the user's own resources and documents they can see qualify, and the
+  tool stays in Chat, never in the MCP server or API keys.
+- The sandbox gives each user who turns it on in Settings a Linux container of
+  their own, `workavera-<user ID>`, whose `/workspace` lives in a named volume
+  and persists across conversations. Each conversation works in its own
+  folder, `/workspace/chats/<conversation ID>`, so files from different
+  conversations do not pile up, while the rest of `/workspace` stays reachable. In Chat the assistant runs commands with
+  `sandbox_bash` — anything still running after 30 seconds continues in the
+  background and can be followed and stopped later, and stopping a Chat run
+  terminates a command still in the foreground — and reads, writes, and edits
+  files with `sandbox_read_file`, `sandbox_write_file`, and
+  `sandbox_edit_file`. `sandbox_import` copies a resource, with its extracted
+  Markdown, or a document into the sandbox on the server, and `sandbox_export`
+  saves a sandbox file as a new resource under the upload rules or as a new
+  document, so file contents never pass through the model. The default image
+  `ghcr.io/xusenlin/workavera-sandbox:2` brings Python with NumPy, pandas,
+  matplotlib, and openpyxl, Node.js with pnpm, common command-line tools, and
+  CJK fonts, and the system prompt lists what an image declares. Settings shows
+  the container's state, image, and limits, rebuilds it when the image changes,
+  lets the user take it offline, and resets the workspace after confirmation.
+  Superusers control the feature, image, network, limits, and idle stop time
+  through `sandbox.*` records in `configs`, which are validated on save and
+  applied to existing containers at once. The sandbox needs Docker on the host
+  and is refused when Workavera itself runs in a container; the tools exist in
+  Chat only, never through the MCP server or API keys.
 
 - Reading has a discovery panel behind the sparkle button in its sidebar. It
   keeps a list of subscriptions the user owns, either an RSS or Atom feed of
@@ -64,6 +99,13 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A Chat response can now take up to 80 steps instead of 12, which longer
+  tool work such as sandbox tasks needs. Superusers can change the limit, from
+  2 to 500, through the `chat.max_steps` record in `configs`, which is checked
+  on save and applies from the next response. The last step cannot call tools, so a
+  response that reaches the limit still ends by telling the user what was
+  done, what is left, and where the results are, instead of stopping after a
+  tool call. A running tool card now shows a spinner rather than a clock.
 - The document share dialog can open the shared link in a new tab instead of
   only copying it.
 - Tasks carry an optional start date alongside their due date, so a task is a

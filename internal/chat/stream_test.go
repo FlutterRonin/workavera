@@ -46,7 +46,7 @@ func TestSystemPromptUsesEffectiveMemoryPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	disabled := buildSystemPrompt(app, user)
+	disabled := buildSystemPrompt(app, user, "")
 	if !strings.Contains(disabled, "Long-term Chat memory is disabled") || !strings.Contains(disabled, "complete set of active long-term memories available for this run is empty") || strings.Contains(disabled, "Saved Memories (complete") {
 		t.Fatalf("unexpected disabled memory prompt: %s", disabled)
 	}
@@ -72,7 +72,7 @@ func TestSystemPromptUsesEffectiveMemoryPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	explicitOnly := buildSystemPrompt(app, user)
+	explicitOnly := buildSystemPrompt(app, user, "")
 	for _, text := range []string{"Automatic capture is disabled", "system_memory_upsert", "complete and authoritative", "historical events", "A memory absent from Saved Memories", "Saved Memories (complete, authoritative", memory.Id, memory.GetString("content")} {
 		if !strings.Contains(explicitOnly, text) {
 			t.Fatalf("enabled prompt is missing %q: %s", text, explicitOnly)
@@ -87,7 +87,7 @@ func TestSystemPromptUsesEffectiveMemoryPolicy(t *testing.T) {
 	if err := app.Save(preference); err != nil {
 		t.Fatal(err)
 	}
-	automatic := buildSystemPrompt(app, user)
+	automatic := buildSystemPrompt(app, user, "")
 	if !strings.Contains(automatic, "Automatic capture is enabled") {
 		t.Fatalf("automatic prompt missing effective policy: %s", automatic)
 	}

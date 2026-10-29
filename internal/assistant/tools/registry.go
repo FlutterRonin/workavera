@@ -1,12 +1,15 @@
 package tools
 
 import (
+	"context"
+
 	"charm.land/fantasy"
 	"github.com/pocketbase/pocketbase/core"
 
 	workagent "github.com/xusenlin/workavera/internal/agent"
 	"github.com/xusenlin/workavera/internal/mcpclient"
 	"github.com/xusenlin/workavera/internal/preferences"
+	"github.com/xusenlin/workavera/internal/sandbox"
 )
 
 // Factory owns application dependencies and creates actor-scoped Fantasy
@@ -73,9 +76,11 @@ func (f *Factory) ForActor(actorID string) []fantasy.AgentTool {
 }
 
 // ForChat returns the normal actor tools plus the Chat-only tools: the
-// resource download link tools, memory tools when the user's memory preference
-// is enabled, and the tools their own MCP servers contribute. MCP deliberately
-// continues to call ForActor, so none of them is ever exposed through API keys.
+// resource download link tools, chat_send_files, which shows files as cards in
+// the reply and means nothing outside Chat, memory tools when the user's memory preference
+// is enabled, sandbox tools when the user's sandbox is on and available, and
+// the tools their own MCP servers contribute. MCP deliberately continues to
+// call ForActor, so none of them is ever exposed through API keys.
 //
 // Download links stay in Chat because each one is a bearer credential whose
 // target and purpose the user approves per call, and an API key only has the
@@ -90,6 +95,7 @@ func (f *Factory) ForChat(scope workagent.ToolScope) []fantasy.AgentTool {
 	tools := append(f.ForActor(scope.ActorID),
 		newResourcesCreateDownloadURLTool(f.app, scope.ActorID),
 		newResourcesRevokeDownloadURLTool(f.app, scope.ActorID),
+		newChatSendFilesTool(f.app, scope.ActorID),
 	)
 	if f.app == nil {
 		return tools
@@ -99,6 +105,9 @@ func (f *Factory) ForChat(scope workagent.ToolScope) []fantasy.AgentTool {
 			newMemoryUpsertTool(f.app, scope, preference.MemoryAutoCapture),
 			newMemoryForgetTool(f.app, scope),
 		)
+	}
+	if manager := sandbox.For(f.app); manager.ToolsEnabled(context.Background(), scope.ActorID) {
+		tools = append(tools, sandboxTools(f.app, manager, scope)...)
 	}
 	return append(tools, mcpclient.Tools(f.app, scope.ActorID)...)
 }

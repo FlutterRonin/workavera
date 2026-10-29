@@ -10,6 +10,9 @@ type Request struct {
 	ConversationID string
 	UserMessageID  string
 	Approval       ApprovalHandler
+	// MaxSteps bounds the steps of the run, the last of which answers
+	// without tools; zero means the default.
+	MaxSteps int
 }
 
 type ToolScope struct {

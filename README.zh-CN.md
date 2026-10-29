@@ -141,11 +141,32 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 
 只有当 `users` 集合为空时才会初始化 demo 用户，因此升级已有工作区不会新增账号，也不会覆盖现有账号。
 
+实例级设置保存在 `configs` 集合中，只有超级管理员能在 PocketBase 后台修改。除了[沙箱](#沙箱sandbox)相关的 key，`chat.max_steps`（默认 `80`，取值 2 到 500）限制一次 Chat 回复最多调用模型的次数；最后一次不能调用工具，因此达到上限的回复也会以总结结束。
+
 ### 文件转换的内存需求
 
 Resources 用内嵌的 WebAssembly 模块转换上传的文档，该模块会被编译成本机代码一次，并缓存在 `pb_data` 旁边的 `anydoc_cache/` 中。编译会短暂占用约 **550 MB** 内存，在服务启动后于后台进行：首次部署、升级之后、更换 CPU 以及重建容器之后都会发生。请按这个峰值而不是空闲时接近零的占用来规划主机内存；之后每个进行中的转换最多约占 100 MB。编译失败时 Workavera 其余功能照常可用，只有资源上传不可用。该缓存不含用户数据，可以安全删除，代价只是重新编译一次。
 
 助手为资源创建的下载链接，只在服务端 Application URL（PocketBase 设置）使用 HTTPS 时才会签发。
+
+### 沙箱（Sandbox）
+
+在 Settings 中开启沙箱的用户，会获得一个属于自己的 Linux 容器（`workavera-<用户 ID>`，`/workspace` 位于命名数据卷中），Chat 里的助手可以在其中执行命令、编写 Python 和 Node 脚本，并在沙箱与 Resources、Docs 之间搬运文件。前提条件：
+
+- **Workavera 以预构建二进制直接运行在主机上**，而不是运行在 Docker 镜像中。Workavera 运行在容器中时沙箱不可用：在容器里访问 Docker 只能挂载宿主机的 Docker socket，或以 `--privileged` 运行 Docker-in-Docker，两者都等于把整台宿主机交给一个面向网络的服务。因此官方镜像不包含 Docker CLI。
+- **主机上安装了 Docker**，`PATH` 中有 `docker` 命令，且运行 Workavera 的系统用户有权使用它。在 Linux 上这通常意味着加入 `docker` 组，而该组等同于 root 权限，建议使用专用主机或虚拟机，或者使用 rootless Docker。
+
+镜像 `ghcr.io/xusenlin/workavera-sandbox`（见 [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox)）在首次使用时拉取。超级管理员在 PocketBase 后台（`/_/`）通过 `configs` 集合中的以下记录控制沙箱，非法值会在保存时被拒绝：
+
+| key | 默认值 | 说明 |
+| --- | --- | --- |
+| `sandbox.enabled` | `true` | 总开关；设为 `false` 会停止所有沙箱容器 |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | 新建和重建容器使用的镜像，例如镜像加速地址 |
+| `sandbox.network` | `true` | 网络总开关；设为 `false` 会让所有沙箱离线 |
+| `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | 每个容器的资源上限，立即作用于已有容器 |
+| `sandbox.idle_timeout_minutes` | `60` | 空闲多少分钟后停止容器；`0` 表示不自动停止 |
+
+安全提醒：容器与宿主机共享内核，不能作为运行恶意代码的隔离边界，向不可信用户开放的实例请部署在专用主机或虚拟机上。联网的沙箱可以访问宿主机上已发布的端口、局域网，以及 `169.254.169.254` 这类云厂商元数据接口，请用防火墙限制 `workavera-sandbox` 网络，或关闭 `sandbox.network`。磁盘用量没有配额，请监控 Docker 数据目录所在的磁盘。`docker ps -a --filter label=workavera.sandbox=1` 可以列出全部沙箱。
 
 ## 产品模块
 
@@ -156,7 +177,8 @@ Resources 用内嵌的 WebAssembly 模块转换上传的文档，该模块会被
 - **Calendar** 在同一视图中合并个人事件与可见的 Board 截止事项，支持重复日程和站内提醒。
 - **Chat** 是你和模型协作的地方：持久化的流式会话，浏览器断开后运行继续，展示推理与工具调用，长会话自动压缩，并提供默认关闭的长期记忆。
 - **Reading** 保存外部链接和笔记，支持关联项目、标签、阅读状态和 AI 总结。
-- **Resources** 保存你上传的文件（PDF、Office、OpenDocument、RTF、EPUB、CSV、HTML、文本和 JSON）及其提取出的文本，Chat 可以用 `+` 或 `#` 附加它们，助手可以搜索和阅读其内容。
+- **Resources** 保存你上传的文件（PDF、Office、OpenDocument、RTF、EPUB、CSV、HTML、文本、JSON、图片和 ZIP 压缩包）以及文档提取出的文本，Chat 可以用 `+` 或 `#` 附加它们，助手可以搜索和阅读其内容。
+- **Sandbox** 为每位用户提供可选的 Linux 容器，助手可以在其中运行命令和脚本，并与 Resources、Docs 交换文件；前提条件见 [沙箱（Sandbox）](#沙箱sandbox)。
 - **Contacts** 提供可搜索的团队联系人列表和个人收藏。
 - **Dashboard、Notifications 与 Settings** 分别负责工作概览、站内通知收件箱，以及模型配置与分享、外观和个人资料。
 

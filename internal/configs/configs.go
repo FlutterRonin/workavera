@@ -16,6 +16,7 @@ func Register(app core.App) {
 		group.GET("/system", getSystemConfig)
 		return event.Next()
 	})
+	app.OnRecordValidate(CollectionName).BindFunc(validateRecord)
 }
 
 const (

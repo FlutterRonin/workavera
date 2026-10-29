@@ -56,7 +56,7 @@ Resources 是 Workavera 的用户级通用静态资源层。用户上传一次�
 7. 客户端提交的资源名称、类型和大小不可信。创建消息时，服务端根据资源 ID 校验 Owner，并用当前资源记录重建规范快照。
 8. 消息发送后，其资源引用和展示快照不可修改；资源显示名称之后发生变化不回写历史消息。
 9. 资源可以由 Owner 随时删除，与是否被消息引用无关。删除后历史消息保留原有快照，并在 UI 上标记为不可访问。
-10. 转换在上传请求内同步完成。转换失败的上传整体失败，不创建资源记录，也不保留源文件；失败原因只在 HTTP 响应里返回，不落库。
+10. 转换在上传请求内同步完成。转换失败的上传整体失败，不创建资源记录，也不保留源文件；失败原因只在 HTTP 响应里返回，不落库。二进制资源（见第 5 节"二进制资源"）不做转换，不保存 Markdown。
 11. Assistant 的搜索和读取工具只使用已保存的 `converted_markdown`，不会在工具调用时重新转换源文件。
 12. Assistant 只能按当前认证用户读取资源；模型提供的资源 ID 永远不是权限依据。
 13. 临时下载 URL 是 bearer credential。获得 URL 的一方可以在有效期内无需 Workavera 登录下载对应源文件，因此创建行为必须短期、受限、可撤销和可审计。
@@ -120,9 +120,27 @@ anydoc 不解析 HTML，因此 HTML 走独立路径，使用纯 Go 的 `github.c
 - 转换在主进程内进行，没有 wasm 沙箱，也不能像 wasm guest 那样被 context 中途中断（该库接受 context 但不检查取消）。有界性来自输入本身：6 MiB 上限加上线性复杂度的 HTML 解析，单次转换的时间和内存都随输入线性增长；HTML 转换同样占用转换信号量，避免与 go-anydoc 转换叠加超出内存预算；
 - `.mhtml`、`.webarchive` 等打包格式不在此路径内，仍不支持。
 
+### 二进制资源
+
+图片和 ZIP 压缩包（最常见的来源是[沙箱](./sandbox-prd.zh-CN.md)）作为二进制资源保存，规则对用户上传和沙箱导出完全相同。
+
+| 类别 | 扩展名 | 媒体类型 |
+| --- | --- | --- |
+| 图片 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp` | `image/png`、`image/jpeg`、`image/gif`、`image/webp` |
+| 压缩包 | `.zip` | `application/zip` |
+
+- 不调用任何转换器，`converted_markdown` 为空字符串，`converted_size` 为 0。资源是否为二进制由服务端检测到的 `media_type` 决定，不增加新字段。
+- 6 MiB 上限、真实媒体类型检测、SHA-256 去重、Owner 隔离和下载凭证规则全部照旧。
+- 不支持 SVG：它是可以执行脚本的 XML，作为受保护文件直接在浏览器打开时存在 XSS 风险。
+- ZIP 只作为整体存储和下载，不解压，也不读取其中内容。ZIP 签名同样匹配 OOXML 和 EPUB，检测器会优先识别这些具体格式；以 `.zip` 上传的这类文件仍然是 ZIP 压缩包。
+- 图片型 PDF 仍然按 `document_needs_ocr` 拒绝；需要交付图表时导出图片本身。
+- `resources_list` 对二进制资源只按名称匹配。`resources_search` 和 `resources_read_markdown` 对二进制资源返回 `resource_has_no_text`，说明该文件只能下载，或用 `sandbox_import` 放入沙箱处理。
+- Chat 中附加二进制资源时，模型看到的元数据块注明该文件没有文本表示。
+- Resources 页面对二进制资源隐藏"查看提取文本"，重命名、下载、删除、附加到 Chat 不变。
+
 ### 不支持的格式
 
-第一版不接受 XML/RSS/Atom、Jupyter Notebook、ZIP、MHTML/Web Archive、图片、音频、视频、可执行文件和其他未列出的格式。
+第一版不接受 XML/RSS/Atom、Jupyter Notebook、MHTML/Web Archive、SVG 及上文未列出的其他图片、音频、视频、可执行文件和其他未列出的格式。
 
 ## 6. 数据模型
 
@@ -137,13 +155,13 @@ anydoc 不解析 HTML，因此 HTML 走独立路径，使用纯 Go 的 `github.c
 | `media_type` | text | 服务端检测并规范化的媒体类型，创建后不可变 |
 | `size` | number | 服务端确认的源文件字节数，创建后不可变 |
 | `sha256` | hidden text | 源文件 SHA-256，创建后不可变 |
-| `converted_markdown` | text | 转换或直通得到的完整 Markdown，最大 8 MiB，创建后不可变 |
+| `converted_markdown` | text | 转换或直通得到的完整 Markdown，最大 8 MiB，创建后不可变；二进制资源为空 |
 | `converted_size` | number | Markdown 的 UTF-8 字节数 |
 | `created`、`updated` | autodate | 记录时间 |
 
 同一 Owner 下 `sha256 + original_name` 唯一。上传相同内容和相同原始文件名时复用现有资源；相同内容但不同原始文件名视为不同资源，避免用户意外合并不同语义的文件。
 
-记录一定同时具备源文件和非空 `converted_markdown`——转换失败的上传根本不会落库，因此不存在"存在但不可用"的中间态，读取方不需要判断状态。
+记录一定具备源文件，除二进制资源外也一定具备非空 `converted_markdown`——转换失败的上传根本不会落库，因此不存在"存在但不可用"的中间态，读取方不需要判断状态。
 
 除 `display_name` 外，资源记录在创建后不再变化。发放和撤销下载链接不写这张表，因此 `updated` 始终反映用户对资源本身的操作。
 
@@ -643,6 +661,17 @@ Assistant 没有可靠的时钟：系统提示词只提供当前日期，不提�
 - 用户询问某个链接是否还有效时，如实说明无法判断，并提示可以重新生成或在 Resources 页面查看；
 - 创建工具的结果会随会话历史持久化，因此历史中的 URL 在有效期内仍然是可用凭证。这正是必须及时撤销的原因，也是 UI 不能把历史工具卡里的链接渲染成常规可点击链接的原因。
 
+### `chat_send_files`
+
+在回复中以文件卡片向用户展示最多 6 个资源或文档。助手交付自己产出的文件（例如从沙箱导出的图片或文档），或用户要求查看的文件时，用它直接展示，而不是告诉用户去哪里找。
+
+- 输入：`files`，1 到 6 个互不相同的 `{ "kind": "resource" | "doc", "id" }`。
+- 资源必须属于当前用户；文档按 Docs 的可见性规则，包括项目中共享给该用户的文档。任意一项无法解析时整次调用失败，返回 `resource_not_found` 或 `document_not_found`。
+- 名称、媒体类型、大小和文档类型都取自存储的记录，不采用模型提供的值。
+- 只在 Chat 中提供（`ForChat`），不进入 `ForActor`、MCP Server 或 API key。不需要审批：文件不离开 Workavera，只展示给其所属用户，这一点与下载链接不同。
+- 前端把结果渲染为附件组，而不是工具卡片：图片显示 480 像素宽的缩略图（`user_resources.file` 的 `480x0` 缩略图，用文件 token 获取），点击后打开带下载按钮的大图预览；其他资源沿用附件卡片，可打开和下载；文档链接到 Docs。之后被删除的文件与附件一样显示为不可用。
+- 系统提示要求助手只发送最终文件，不发送中间产物，之后简短回复，不重复路径、ID 或链接。
+
 ## 11. 工具结果与上下文行为
 
 资源搜索和读取结果使用现有 `dynamic-tool` part 持久化，因此同一段未压缩的会话历史可以继续使用已经读取的内容，Assistant 不需要在每轮重复调用工具。
@@ -725,7 +754,8 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - 0 字节和超过 6,291,456 字节的文件始终被拒绝。
 - 服务端按内容检测 MIME，拒绝扩展名伪装和未支持格式。
 - 纯文本格式不经过转换器，原样保存为 Markdown；非 UTF-8 文本被拒绝。
-- 成功资源同时保存受保护源文件、元数据、SHA-256 和非空转换 Markdown。
+- 成功资源同时保存受保护源文件、元数据、SHA-256 和非空转换 Markdown；二进制资源不保存 Markdown。
+- 上传 PNG、JPEG、GIF、WebP、ZIP 成功，`resources_read_markdown` 对它们返回 `resource_has_no_text`；上传 SVG 被拒绝。
 - 转换失败、超时或输出为空/过大时上传整体失败，不留下任何资源记录和孤儿文件，并返回稳定错误码。
 - 含扫描页的 PDF（无论全部还是部分页面）在上传时被拒绝，并明确告知需要 OCR 的页码。
 - 加密文档和损坏文档返回彼此不同、且与"格式不支持"不同的错误码。
@@ -769,7 +799,7 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - `resources_list`、`resources_search`、`resources_read_markdown` 出现在 Workavera MCP Server 的工具列表中，权限范围是 API key 的 Owner，且不受 `allow_destructive` 影响；两个下载链接工具不出现在 MCP 工具列表中。
 - 数据库中只存在 `user_resources` 和 `resource_download_leases` 两张集合，没有消息关系表。
 - `.html`/`.htm` 上传后得到保留标题、列表、表格和链接的 Markdown，脚本、样式和 `data:` 内联图片不出现在结果中；非 UTF-8 编码的页面正确解码；转换过程不发出任何网络请求。
-- 扫描 PDF、精确页码读取、OCR、语义搜索、Feed/Notebook、MHTML/Web Archive、ZIP 和 Provider file ID 不被第一版误标为已支持。
+- 扫描 PDF、精确页码读取、OCR、语义搜索、Feed/Notebook、MHTML/Web Archive、SVG 和 Provider file ID 不被第一版误标为已支持。
 
 ## 16. 本稿需要确认的产品选择
 
@@ -788,5 +818,5 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 11. `resources_read_markdown` 单次最多返回 100,000 字符，通过 cursor 实现逻辑全文读取。
 12. **编译器模式配磁盘编译缓存，转换器按需创建、用完关闭，并发上限 2。** 缓存命中时创建实例只需约 7 ms，因此不常驻：空闲时不占内存，转换期间每路最多约 100 MiB，天花板约 200 MiB；转换 1.3 MB 的 PDF 约 0.3 秒——在启动、内存和延迟三方面都优于解释器模式，因此不提供运行模式的降级开关。代价是每次缓存未命中需要约 550 MiB 峰值来完成编译，包括重建容器之后的那一次；启动后台预热把这次编译放在启动阶段。缓存在运行时构建，镜像部署和二进制部署行为一致，不做构建期预热。并发上限 2 是按"上传不是高频操作"设的，需要更高吞吐时上调，天花板随之线性上升。
 13. **跟随 go-anydoc v0.3.1 使用 wazy 运行时。** wazy 源自 wazero，同样纯 Go，在这类工作负载上更快、分配少几个数量级，编译缓存命中后启动约 7 ms、转换 1.3 MB 的 PDF 约 0.3 秒。代价是它很年轻、单作者维护、没有 API 稳定承诺。可以接受的原因是 go-anydoc 由我们自己维护：wazy 版本在 go-anydoc 中锁定，Workavera 只依赖 go-anydoc 的 `New`/`Convert`/`Close` 接口；若 wazy 出现无法接受的问题，可以在 go-anydoc 内换回 wazero（v0.1.3 即是 wazero 实现），Workavera 侧不需要改动。
-14. 第一版不支持 Feed、Jupyter、ZIP、MHTML/Web Archive、图片、OCR 和精确页/幻灯片/工作表范围读取。HTML 通过独立的 html-to-markdown 路径支持：anydoc 不解析 HTML，而纯 Go 转换库只增加约 0.7 MB，且复用已有的 `x/net/html`。代价是 HTML 转换不在 wasm 沙箱内、不能中途中断，靠 6 MiB 输入上限和线性解析保证有界。
+14. 第一版不支持 Feed、Jupyter、MHTML/Web Archive、SVG、OCR 和精确页/幻灯片/工作表范围读取。HTML 通过独立的 html-to-markdown 路径支持：anydoc 不解析 HTML，而纯 Go 转换库只增加约 0.7 MB，且复用已有的 `x/net/html`。代价是 HTML 转换不在 wasm 沙箱内、不能中途中断，靠 6 MiB 输入上限和线性解析保证有界。
 15. **只读资源工具随 MCP 提供，下载链接工具只在 Chat 中提供。** 只读工具与 Docs、Reading 工具同等对待；下载链接是 bearer credential，创建它需要逐次展示目标资源和用途的审批，而 MCP 侧没有对应的确认界面。代价是 MCP 客户端拿不到源文件原件，只能阅读转换后的 Markdown。

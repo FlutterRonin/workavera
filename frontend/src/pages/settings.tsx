@@ -21,6 +21,7 @@ import { McpServersCard } from "@/components/mcp-servers-card"
 import { ModelCopyDialog } from "@/components/model-copy-dialog"
 import { ModelSheet } from "@/components/model-sheet"
 import { MemorySettingsCard } from "@/components/memory-settings-card"
+import { SandboxSettingsCard } from "@/components/sandbox-settings-card"
 import { useTheme } from "@/components/theme-provider"
 import {
   AlertDialog,
@@ -354,6 +355,8 @@ export function SettingsPage() {
       <ApiKeysCard />
 
       <MemorySettingsCard />
+
+      <SandboxSettingsCard />
 
       <AppearanceCard />
 

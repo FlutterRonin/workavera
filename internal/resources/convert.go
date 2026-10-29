@@ -127,8 +127,12 @@ func directoryHasEntries(dir string) bool {
 }
 
 // toMarkdown produces the Markdown for one upload and validates it. Every
-// path ends in the same size and emptiness checks.
+// path that converts ends in the same size and emptiness checks; binary
+// formats have no Markdown at all.
 func (c *converter) toMarkdown(ctx context.Context, path conversionPath, ext string, data []byte) (string, error) {
+	if path == pathBinary {
+		return "", nil
+	}
 	var markdown string
 	var err error
 	switch path {

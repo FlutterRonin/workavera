@@ -2,6 +2,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   File02Icon,
   FileAttachmentIcon,
+  FileZipIcon,
+  Image01Icon,
   Pdf01Icon,
   SourceCodeIcon,
 } from "@hugeicons/core-free-icons"
@@ -11,6 +13,8 @@ import { cn } from "@/lib/utils"
 
 function iconFor(mediaType: string) {
   if (mediaType === "application/pdf") return Pdf01Icon
+  if (mediaType.startsWith("image/")) return Image01Icon
+  if (mediaType === "application/zip") return FileZipIcon
   if (mediaType === "text/html" || mediaType.includes("json"))
     return SourceCodeIcon
   if (mediaType.startsWith("text/")) return File02Icon

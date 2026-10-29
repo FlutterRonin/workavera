@@ -37,7 +37,27 @@ export const RESOURCE_EXTENSIONS = [
   "csv",
   "html",
   "htm",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "zip",
 ]
+
+/** Media types stored without text: they can be downloaded but have no
+ * extracted text to view, search, or read. */
+const BINARY_MEDIA_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/zip",
+])
+
+export function isBinaryResource(mediaType: string) {
+  return BINARY_MEDIA_TYPES.has(mediaType)
+}
 
 export const RESOURCE_ACCEPT = RESOURCE_EXTENSIONS.map((ext) => `.${ext}`).join(
   ","
@@ -74,7 +94,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   file_empty: "The file is empty.",
   file_too_large: "Files must be 6 MB or smaller.",
   unsupported_media_type:
-    "This file type is not supported. Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, or JSON files.",
+    "This file type is not supported. Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, JSON, PNG, JPEG, GIF, WebP, or ZIP files.",
   unsupported_encoding: "The file's text encoding is not supported.",
   invalid_filename: "The file name is missing or invalid.",
   conversion_failed: "The document could not be converted to text.",

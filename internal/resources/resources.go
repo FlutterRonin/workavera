@@ -5,8 +5,10 @@ package resources
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/pocketbase/dbx"
@@ -46,7 +48,12 @@ const (
 	CodeDownloadLeaseExpired     = "download_lease_expired"
 	CodeInvalidInput             = "invalid_input"
 	CodeDownloadLinksUnavailable = "download_links_unavailable"
+	CodeResourceHasNoText        = "resource_has_no_text"
 )
+
+// converterStoreKey keeps the registered converter in the app store, so
+// server-side uploads share its warm-up and concurrency limit.
+const converterStoreKey = "resources.converter"
 
 // Error is a failure with a stable code and a description that is safe to
 // show to users and models. The wrapped cause, which may carry parser output
@@ -89,6 +96,8 @@ func Register(app core.App) {
 }
 
 func register(app core.App, s *service) {
+	app.Store().Set(converterStoreKey, s.converter)
+
 	app.OnServe().BindFunc(func(event *core.ServeEvent) error {
 		s.converter.warmInBackground()
 
@@ -267,4 +276,54 @@ type errorBody struct {
 	Code    string         `json:"code"`
 	Message string         `json:"message"`
 	Data    map[string]any `json:"data"`
+}
+
+// SourceFile is a resource's original bytes together with its stored
+// Markdown, which is empty for binary resources.
+type SourceFile struct {
+	ID          string
+	DisplayName string
+	// FileName is the display name, carrying the original file's extension
+	// when the display name has lost it, so tools still recognize the file.
+	FileName  string
+	MediaType string
+	Data      []byte
+	Markdown  string
+}
+
+// Source reads one of the owner's resources for server-side use, such as
+// copying it into the owner's sandbox. Only the owner's own resources resolve.
+func Source(app core.App, ownerID, id string) (SourceFile, error) {
+	record, err := findOwnedResource(app, ownerID, id)
+	if err != nil {
+		return SourceFile{}, err
+	}
+	fsys, err := app.NewFilesystem()
+	if err != nil {
+		return SourceFile{}, err
+	}
+	defer fsys.Close()
+	reader, err := fsys.GetReader(record.BaseFilesPath() + "/" + record.GetString("file"))
+	if err != nil {
+		return SourceFile{}, err
+	}
+	defer reader.Close()
+	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSize+1))
+	if err != nil {
+		return SourceFile{}, err
+	}
+
+	displayName := record.GetString("display_name")
+	fileName := displayName
+	if ext := path.Ext(record.GetString("original_name")); !strings.EqualFold(path.Ext(displayName), ext) {
+		fileName += ext
+	}
+	return SourceFile{
+		ID:          record.Id,
+		DisplayName: displayName,
+		FileName:    fileName,
+		MediaType:   record.GetString("media_type"),
+		Data:        data,
+		Markdown:    record.GetString("converted_markdown"),
+	}, nil
 }

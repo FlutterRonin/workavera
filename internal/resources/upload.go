@@ -23,6 +23,8 @@ const (
 	pathText conversionPath = iota
 	pathAnydoc
 	pathHTML
+	// pathBinary stores the file as it is, without any Markdown.
+	pathBinary
 )
 
 // format describes one accepted extension: the media type stored for it, the
@@ -74,6 +76,28 @@ var formats = map[string]format{
 
 	"html": {mediaType: "text/html", detected: []string{"text/html", "application/xhtml+xml", mimeText}, path: pathHTML},
 	"htm":  {mediaType: "text/html", detected: []string{"text/html", "application/xhtml+xml", mimeText}, path: pathHTML},
+
+	// Binary resources are stored and downloaded, never converted. SVG is
+	// left out on purpose: it is XML that can run scripts when opened.
+	"png":  {mediaType: "image/png", detected: []string{"image/png"}, path: pathBinary},
+	"jpg":  {mediaType: "image/jpeg", detected: []string{"image/jpeg"}, path: pathBinary},
+	"jpeg": {mediaType: "image/jpeg", detected: []string{"image/jpeg"}, path: pathBinary},
+	"gif":  {mediaType: "image/gif", detected: []string{"image/gif"}, path: pathBinary},
+	"webp": {mediaType: "image/webp", detected: []string{"image/webp"}, path: pathBinary},
+	// The ZIP signature also opens OOXML and EPUB files, which the detector
+	// names first; those are still ZIP archives and pass as one through the
+	// detected type's ancestors.
+	"zip": {mediaType: "application/zip", detected: []string{"application/zip"}, path: pathBinary},
+}
+
+// IsBinary reports whether resources of the stored media type are binary:
+// they have no Markdown and can only be downloaded or copied.
+func IsBinary(mediaType string) bool {
+	switch mediaType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp", "application/zip":
+		return true
+	}
+	return false
 }
 
 // readUploadedFile returns the single multipart "file" of the request and its
@@ -116,14 +140,38 @@ func checkSize(size int64) error {
 // Upload stores a new resource for the owner, converting it to Markdown in
 // the same request. Nothing is written unless conversion succeeds, so a failed
 // upload leaves neither a record nor a file behind. Uploading the same content
-// under the same original name returns the existing resource.
+// under the same original name returns the existing resource. Binary formats
+// are stored without Markdown.
 func Upload(ctx context.Context, app core.App, conv *converter, ownerID, name string, data []byte) (Resource, error) {
+	return upload(ctx, app, conv, ownerID, name, "", data)
+}
+
+// Save stores bytes produced on the server, such as a file exported from the
+// sandbox, under exactly the rules of a user upload. The name supplies the
+// extension; displayName, when not empty, names a newly created resource
+// instead of it.
+func Save(ctx context.Context, app core.App, ownerID, name, displayName string, data []byte) (Resource, error) {
+	conv, _ := app.Store().Get(converterStoreKey).(*converter)
+	if conv == nil {
+		return Resource{}, newError(CodeConversionFailed, http.StatusServiceUnavailable, "Document conversion is unavailable on this server.")
+	}
+	return upload(ctx, app, conv, ownerID, name, displayName, data)
+}
+
+func upload(ctx context.Context, app core.App, conv *converter, ownerID, name, displayName string, data []byte) (Resource, error) {
 	if err := checkSize(int64(len(data))); err != nil {
 		return Resource{}, err
 	}
 	originalName := sanitizeName(name)
 	if originalName == "" || len([]rune(originalName)) > MaxNameLength || originalName == "." || originalName == ".." {
 		return Resource{}, newError(CodeInvalidFilename, http.StatusBadRequest, "The file name is missing or invalid.")
+	}
+	displayName = sanitizeName(displayName)
+	if displayName == "" {
+		displayName = originalName
+	}
+	if len([]rune(displayName)) > MaxNameLength {
+		return Resource{}, newError(CodeInvalidFilename, http.StatusBadRequest, "The display name must be 1 to 255 characters.")
 	}
 	ext := strings.ToLower(strings.TrimPrefix(path.Ext(originalName), "."))
 	spec, ok := formats[ext]
@@ -156,7 +204,7 @@ func Upload(ctx context.Context, app core.App, conv *converter, ownerID, name st
 	record.Set("owner", ownerID)
 	record.Set("file", file)
 	record.Set("original_name", originalName)
-	record.Set("display_name", originalName)
+	record.Set("display_name", displayName)
 	record.Set("media_type", spec.mediaType)
 	record.Set("size", len(data))
 	record.Set("sha256", contentHash)
