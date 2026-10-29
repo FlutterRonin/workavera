@@ -142,6 +142,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A deactivated account's API keys no longer work. Deactivation already blocked
+  sign-in and ended sessions, but `/api/mcp` still accepted the account's keys,
+  so an MCP client could keep acting as it; such keys are now rejected.
 - A page left open while the server was upgraded no longer fails to open other
   parts of the app with a module-loading error. It now reloads once onto the
   new version, and the server answers requests for build files that no longer

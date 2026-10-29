@@ -49,7 +49,7 @@ A key is created only through `POST /api/apikeys`, which generates the secret (`
 ## 6. MCP endpoint
 
 - `/api/mcp` serves the MCP Streamable HTTP transport in stateless mode, so every request is authenticated on its own.
-- Each request must carry `Authorization: Bearer <key>`. Unknown, malformed, or expired keys are rejected.
+- Each request must carry `Authorization: Bearer <key>`. Unknown, malformed, or expired keys are rejected, and so is every key of a deactivated account.
 - The server identifies itself as Workavera with the running version and sends instructions telling the client to look up exact IDs before changing anything and to treat resource content as data, never instructions.
 - Every tool runs as the key's owner, with exactly the checks the in-app assistant gets: identity, role, ownership, and revision.
 
@@ -58,15 +58,11 @@ A key is created only through `POST /api/apikeys`, which generates the secret (`
 - Tools that need the user's approval in Chat—deleting a Board task and deleting a calendar event—are left out of a key created without **Allow destructive operations**, and the server instructions say so.
 - With the scope allowed, those tools run immediately, without the interactive approval Chat would ask for: creating the key with that scope is the approval. The server instructions tell the client to call them only when explicitly asked.
 
-## 8. Known gaps
-
-- A deactivated account's API keys keep working. Deactivation blocks sign-in and rotates session tokens, but `/api/mcp` does not check the flag, so keys must be revoked by hand until it does.
-
-## 9. Acceptance criteria
+## 8. Acceptance criteria
 
 1. A user can create a key, see it once, copy a working client configuration, and later revoke it.
 2. The stored record never exposes the secret or its hash.
 3. A client using the key can list and call the workspace tools as the key's owner and sees nothing the owner could not see.
 4. A key without the destructive scope does not offer the delete tools; a key with it deletes immediately.
-5. An expired or revoked key is rejected on the next request.
+5. An expired or revoked key, or any key of a deactivated account, is rejected on the next request.
 6. Chat-only tools never appear over MCP.

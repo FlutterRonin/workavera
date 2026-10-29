@@ -124,6 +124,14 @@ func TestAuthenticateKey(t *testing.T) {
 	if _, err := authenticateKey(app, request("Bearer "+expiredSecret)); err == nil {
 		t.Fatal("expired key must be rejected")
 	}
+
+	user.Set("deactivated", true)
+	if err := app.Save(user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authenticateKey(app, request("Bearer "+secret)); err == nil {
+		t.Fatal("a deactivated user's key must be rejected")
+	}
 }
 
 func TestNewServerForKeyFiltersDestructiveTools(t *testing.T) {

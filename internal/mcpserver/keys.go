@@ -113,6 +113,12 @@ func authenticateKey(app core.App, r *http.Request) (*core.Record, error) {
 	if !expires.IsZero() && !expires.Time().After(time.Now()) {
 		return nil, errInvalidKey
 	}
+	// Deactivation blocks sign-in and rotates session tokens; keys must stop
+	// with them, or a deactivated account keeps acting through MCP.
+	owner, err := app.FindRecordById("users", record.GetString("user"))
+	if err != nil || owner.GetBool("deactivated") {
+		return nil, errInvalidKey
+	}
 	touchLastUsed(app, record)
 	return record, nil
 }
