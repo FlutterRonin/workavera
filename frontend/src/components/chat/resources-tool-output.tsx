@@ -8,6 +8,7 @@ import {
   File02Icon,
   FolderLibraryIcon,
   Link04Icon,
+  PencilEdit02Icon,
   Search01Icon,
   Unlink04Icon,
 } from "@hugeicons/core-free-icons"
@@ -30,8 +31,10 @@ import {
   RESOURCE_LEASES_COLLECTION,
   resourceErrorMessage,
 } from "@/lib/resources"
+import { parseBatchToolResult } from "@/lib/tool-batch"
 import { cn } from "@/lib/utils"
 
+import { BatchToolResultSummary } from "./batch-tool-result"
 import { ToolInput } from "./tool-input"
 
 type ResourceRef = { id: string; name: string; mediaType?: string }
@@ -287,6 +290,25 @@ function remaining(expiresAt: number, now: number) {
  * link, never copied automatically, and hidden once it has expired or been
  * revoked.
  */
+export function ResourcesRenameToolCard({ part }: { part: DynamicToolUIPart }) {
+  const batch = parseBatchToolResult<{ id: string; name: string }>(part.output)
+  return (
+    <ToolShell
+      part={part}
+      icon={PencilEdit02Icon}
+      title="Rename Resources"
+      count={batch?.total}
+    >
+      {batch && (
+        <BatchToolResultSummary
+          batch={batch}
+          getLabel={(result) => result.name}
+        />
+      )}
+    </ToolShell>
+  )
+}
+
 export function ResourceDownloadLinkCard({
   part,
 }: {

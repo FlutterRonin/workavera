@@ -253,6 +253,50 @@ func Update(ctx context.Context, app core.App, actorID, id string, input UpdateI
 	return doc, changed, err
 }
 
+// Rename changes only a document's title. Like any other edit it needs the
+// current revision, bumps it, and records a version, but it never touches
+// the content, so renaming many documents needs no full read.
+func Rename(ctx context.Context, app core.App, actorID, id, title string, baseRevision int, source string) (DocumentSummary, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return DocumentSummary{}, false, err
+	}
+	title = strings.TrimSpace(title)
+	if title == "" || len(title) > 240 || baseRevision < 1 {
+		return DocumentSummary{}, false, ErrInvalidInput
+	}
+	if source != "ai" {
+		source = "user"
+	}
+
+	changed := false
+	var renamed *core.Record
+	err := app.RunInTransaction(func(tx core.App) error {
+		record, err := editableRecord(tx, actorID, id)
+		if err != nil {
+			return err
+		}
+		if record.GetInt("revision") != baseRevision {
+			return ErrConflict
+		}
+		renamed = record
+		if record.GetString("title") == title {
+			return nil
+		}
+		record.Set("title", title)
+		record.Set("revision", baseRevision+1)
+		record.Set("last_edited_by", actorID)
+		if err := tx.Save(record); err != nil {
+			return err
+		}
+		changed = true
+		return saveVersion(tx, record, actorID, source)
+	})
+	if err != nil {
+		return DocumentSummary{}, false, err
+	}
+	return documentSummaryForRecord(app, renamed), changed, nil
+}
+
 func Replace(ctx context.Context, app core.App, actorID, id string, input ReplaceInput) (Document, int, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return Document{}, 0, false, err

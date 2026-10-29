@@ -597,6 +597,15 @@ Example result:
 
 In the first version, "reading the full text" means the stored Markdown can be read completely through one or more consecutive calls; reading by the original file's pages or structural ranges is not promised.
 
+### `resources_rename`
+
+Renames the user's resources, only when the user explicitly asks.
+
+- Input: `items`, 1 to 50 entries of `{ resourceId, name }`.
+- Only `display_name` changes, under the same rules as renaming on the Resources page: control and formatting characters and quotes are removed, and the result must be 1 to 255 characters. The source file, original name, media type, and Markdown stay the same.
+- Only the user's own resources resolve; anything else fails that item with `resource_not_found`.
+- Items run in order and are reported one by one, so one failure does not stop the others. Renaming is reversible, so it needs no approval, and the tool is also available through the MCP server and API keys.
+
 ### `resources_create_download_url`
 
 Creates a short-lived download credential for the source file, for an explicit external download or a later external tool call.

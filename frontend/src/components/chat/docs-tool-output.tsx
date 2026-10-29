@@ -257,6 +257,7 @@ const docToolMeta: Record<string, { label: string; icon: typeof File02Icon }> =
     docs_get: { label: "Document", icon: File02Icon },
     docs_upsert: { label: "Upsert Document", icon: FileEditIcon },
     docs_move: { label: "Move Document", icon: FileEditIcon },
+    docs_rename: { label: "Rename Documents", icon: FileEditIcon },
     docs_replace: { label: "Replace Text", icon: ReplaceIcon },
     docs_write_chunk: { label: "Write Document Chunk", icon: FileEditIcon },
   }
@@ -279,6 +280,7 @@ export function DocsItemToolCard({ part }: { part: DynamicToolUIPart }) {
   }
   const isUpsert = part.toolName === "docs_upsert"
   const isMove = part.toolName === "docs_move"
+  const isRename = part.toolName === "docs_rename"
   const isReplace = part.toolName === "docs_replace"
   const isWriteChunk = part.toolName === "docs_write_chunk"
 
@@ -290,7 +292,8 @@ export function DocsItemToolCard({ part }: { part: DynamicToolUIPart }) {
   let changed: boolean | undefined
   let matches: number | undefined
   let chunkResult: WriteChunkResult | null = null
-  const moveBatch = isMove ? parseBatchToolResult<Doc>(part.output) : null
+  const moveBatch =
+    isMove || isRename ? parseBatchToolResult<Doc>(part.output) : null
   const isWrapped = isUpsert || isReplace
   if (moveBatch) {
     // Batch moves render through the shared summary below.
@@ -363,7 +366,9 @@ export function DocsItemToolCard({ part }: { part: DynamicToolUIPart }) {
                     ? "Writing content…"
                     : isUpsert
                       ? "Saving document…"
-                      : "Loading document…"}
+                      : isRename
+                        ? "Renaming documents…"
+                        : "Loading document…"}
               </span>
             </div>
           </div>

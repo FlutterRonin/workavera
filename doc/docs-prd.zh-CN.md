@@ -227,6 +227,7 @@ Markdown 文档使用带应用自有文档结构的 BlockNote；HTML 文档使�
 - `docs_list_folders`：列出当前用户的个人文件夹，供创建或移动前解析 ID。
 - `docs_upsert`：创建文档时可选择个人文件夹或项目，或使用 `baseRevision` 完整替换已有文档。`kind` 为必填；新建时若用户没有指定类型，Assistant 会先简短询问选择简单易编辑的 Markdown，还是丰富可交互的 HTML。
 - `docs_move`：仅在用户明确要求整理或移动时，通过必填 `items` 数组将 1 至 50 篇由当前用户创建的文档在 `My documents`、已有个人文件夹和可编辑项目之间移动；单条移动使用一个元素，并拒绝旧的顶层单文档输入。离开项目会自动解除任务关联，各项按顺序执行并独立返回结果。
+- `docs_rename`：仅在用户明确要求时，通过必填 `items` 数组（`{ id, title, baseRevision }`）重命名 1 至 50 篇可编辑的文档。只修改标题，不需要正文；`baseRevision` 取自 `docs_search` 或 `docs_get`。每次改名都会递增修订号并记录版本，修订号过期只使该项失败，各项按顺序执行并独立返回结果。
 - `docs_replace`：使用 `baseRevision` 替换第一个或全部精确 Markdown 匹配。
 - `docs_write_chunk`：按 replace/append 顺序写入过大的 Markdown 或 HTML 正文，并只记录一个逻辑版本。
 

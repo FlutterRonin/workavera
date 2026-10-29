@@ -48,6 +48,7 @@ import {
   ResourceDownloadLinkCard,
   ResourcesListToolCard,
   ResourcesReadToolCard,
+  ResourcesRenameToolCard,
   ResourcesRevokeToolCard,
   ResourcesSearchToolCard,
 } from "./resources-tool-output"
@@ -110,6 +111,7 @@ const docItemToolNames = new Set([
   "docs_get",
   "docs_upsert",
   "docs_move",
+  "docs_rename",
   "docs_replace",
   "docs_write_chunk",
 ])
@@ -215,6 +217,9 @@ function ToolCard({
   }
   if (part.toolName === "resources_read_markdown") {
     return <ResourcesReadToolCard part={part} />
+  }
+  if (part.toolName === "resources_rename") {
+    return <ResourcesRenameToolCard part={part} />
   }
   if (part.toolName === "resources_create_download_url") {
     return <ResourceDownloadLinkCard part={part} />

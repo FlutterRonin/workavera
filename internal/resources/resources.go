@@ -203,6 +203,26 @@ func findOwnedResource(app core.App, ownerID, id string) (*core.Record, error) {
 	return record, nil
 }
 
+// Rename changes the display name of one of the owner's resources, under the
+// same rules as renaming it on the Resources page.
+func Rename(app core.App, ownerID, id, name string) (Resource, error) {
+	record, err := findOwnedResource(app, ownerID, id)
+	if err != nil {
+		return Resource{}, err
+	}
+	name = sanitizeName(name)
+	if name == "" || len([]rune(name)) > MaxNameLength {
+		return Resource{}, newError(CodeInvalidInput, http.StatusBadRequest, "The display name must be 1 to 255 characters.")
+	}
+	if record.GetString("display_name") != name {
+		record.Set("display_name", name)
+		if err := app.Save(record); err != nil {
+			return Resource{}, err
+		}
+	}
+	return resourceFromRecord(record), nil
+}
+
 // Delete removes one of the owner's resources together with its source file
 // and, through the cascading relation, every download lease pointing to it.
 func Delete(app core.App, ownerID, id string) error {

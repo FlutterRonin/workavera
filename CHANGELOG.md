@@ -33,6 +33,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
   the assistant is told an attached image or archive has no text, and searching
   or reading one reports `resource_has_no_text`. SVG stays unsupported, since
   it can carry scripts.
+- The assistant can rename up to 50 resources or documents at once with new
+  `resources_rename` and `docs_rename` tools, taking an ID and a new name for
+  each. A document rename changes only the title, so it needs the current
+  revision but not the content, and records a version like any other edit;
+  each item reports its own result. Both tools are also available through the
+  MCP server and API keys.
 - The assistant can hand files to the user in Chat with a new
   `chat_send_files` tool: up to six of the user's resources or documents appear
   in its reply as file cards. Images show a thumbnail that opens a larger

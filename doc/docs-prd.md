@@ -227,6 +227,7 @@ Personal folders use PocketBase `/api/collections/doc_folders/records` CRUD. Doc
 - `docs_list_folders`: lists the current user's personal folders so IDs can be resolved before creating or moving.
 - `docs_upsert`: creates a document in My documents, a personal folder, or a project, or writes a complete replacement using `baseRevision`. Its `kind` is required; before creating, the Assistant briefly asks the user to choose simple, easily editable Markdown or rich, interactive HTML when no kind was specified.
 - `docs_move`: only when explicitly requested, moves one to 50 creator-owned documents between My documents, existing personal folders, and editable projects through a required `items` array; a single move uses one item, and legacy top-level single-document input is rejected. Leaving a project automatically unlinks its tasks. Items execute in order with independent results.
+- `docs_rename`: only when explicitly requested, renames one to 50 editable documents through a required `items` array of `{ id, title, baseRevision }`. Only the title changes, so no content is needed; the revision comes from `docs_search` or `docs_get`. Each rename bumps the revision and records a version, a stale revision fails only its own item, and items execute in order with independent results.
 - `docs_replace`: replaces the first or all exact Markdown matches using `baseRevision`.
 - `docs_write_chunk`: writes oversized Markdown or HTML content in a replace/append sequence while recording one logical version.
 

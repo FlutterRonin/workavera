@@ -29,6 +29,15 @@ type resourcesReadInput struct {
 	MaxChars   int    `json:"maxChars,omitempty" description:"Maximum characters to return, default 50000, max 100000"`
 }
 
+type resourcesRenameItem struct {
+	ResourceID string `json:"resourceId" description:"Resource ID from an attached-file block or resources_list"`
+	Name       string `json:"name" description:"New display name, 1-255 characters; keep the file extension unless the user asks otherwise"`
+}
+
+type resourcesRenameInput struct {
+	Items []resourcesRenameItem `json:"items" description:"One to 50 resource renames"`
+}
+
 type resourcesCreateDownloadURLInput struct {
 	ResourceID string `json:"resourceId" description:"Resource ID from an attached-file block or resources_list"`
 	Purpose    string `json:"purpose" description:"Concrete use and recipient of the file, 10-200 characters, shown to the user for approval, e.g. 'Send the contract to the e-signature MCP tool for signing'"`
@@ -67,6 +76,28 @@ func newResourcesReadTool(app core.App, actorID string) fantasy.AgentTool {
 		func(ctx context.Context, input resourcesReadInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			result, err := resources.Read(ctx, app, actorID, input.ResourceID, input.Cursor, input.MaxChars)
 			return resourcesToolResponse(app, actorID, "read", result, err)
+		},
+	)
+}
+
+func newResourcesRenameTool(app core.App, actorID string) fantasy.AgentTool {
+	return fantasy.NewAgentTool(
+		"resources_rename",
+		"Rename the user's resources only when the user explicitly asks. Changes only the display name shown in Resources and Chat; the original file, its content, and its type stay the same. Results are reported per item, so one failure does not stop the others.",
+		func(_ context.Context, input resourcesRenameInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			result, err := executeBatch(input.Items, func(_ int, item resourcesRenameItem) (any, error) {
+				resource, err := resources.Rename(app, actorID, item.ResourceID, item.Name)
+				if err != nil {
+					var resourceErr *resources.Error
+					if errors.As(err, &resourceErr) {
+						return nil, errors.New(resourceErr.Code + ": " + resourceErr.Message)
+					}
+					app.Logger().Error("assistant resources rename failed", "actorId", actorID, "error", err)
+					return nil, errors.New("The resource could not be renamed.")
+				}
+				return map[string]any{"id": resource.ID, "name": resource.DisplayName}, nil
+			})
+			return batchToolResponse(result, err)
 		},
 	)
 }

@@ -41,6 +41,16 @@ type docsMoveInput struct {
 	Items []docsMoveItem `json:"items" description:"One to 50 document moves"`
 }
 
+type docsRenameItem struct {
+	ID           string `json:"id" description:"Document ID returned by docs_search or docs_get"`
+	Title        string `json:"title" description:"New complete title, 1-240 characters"`
+	BaseRevision int    `json:"baseRevision" description:"Current revision returned by docs_search or docs_get; the rename fails if it is stale"`
+}
+
+type docsRenameInput struct {
+	Items []docsRenameItem `json:"items" description:"One to 50 document renames"`
+}
+
 type docsWriteChunkInput struct {
 	ID           string `json:"id" description:"Existing document ID"`
 	Content      string `json:"content" description:"The next chunk of document content"`
@@ -106,6 +116,19 @@ func newDocsMoveTool(app core.App, actorID string) fantasy.AgentTool {
 	return fantasy.NewAgentTool("docs_move", "Move a document only when the user explicitly asks to organize or move it. A document's creator can move it to My documents, an existing personal folder, or an editable project. Moving a document out of a project automatically unlinks it from that project's tasks.", func(ctx context.Context, input docsMoveInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 		result, err := executeBatch(input.Items, func(_ int, item docsMoveItem) (any, error) {
 			return workdocs.Move(ctx, app, actorID, item.ID, workdocs.MoveInput{Destination: item.Destination, DestinationID: item.DestinationID})
+		})
+		return batchToolResponse(result, err)
+	})
+}
+
+func newDocsRenameTool(app core.App, actorID string) fantasy.AgentTool {
+	return fantasy.NewAgentTool("docs_rename", "Rename documents only when the user explicitly asks. Changes only the title, so the content is never needed: pass the revision from docs_search or docs_get as baseRevision. Each rename bumps the revision and records a version. Results are reported per item; a stale revision fails only that item, so search again for the current revision before retrying it.", func(ctx context.Context, input docsRenameInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		result, err := executeBatch(input.Items, func(_ int, item docsRenameItem) (any, error) {
+			doc, changed, err := workdocs.Rename(ctx, app, actorID, item.ID, item.Title, item.BaseRevision, "ai")
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"id": doc.ID, "title": doc.Title, "revision": doc.Revision, "changed": changed}, nil
 		})
 		return batchToolResponse(result, err)
 	})
