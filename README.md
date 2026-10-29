@@ -4,47 +4,32 @@
 
 [简体中文](./README.zh-CN.md)
 
-> **A self-hosted AI workspace for freelancers and small teams** — projects, docs, calendar, and reading in one binary on your own server, with an assistant that can actually operate them, inside your own permissions.
+> **Your projects, docs, calendar, and files in one self-hosted workspace—with an AI assistant that actually gets the work done.**
 
-> ⚠️ **Early-stage software (0.x).** Features and data schemas are still changing quickly, and releases may include breaking changes (see the [changelog](./CHANGELOG.md)). Back up `pb_data` before upgrading. It is not ready for production use yet.
+> 🎉 **New: Sandbox and Resources are here!** Keep your files in **Resources** and attach them to any conversation, then turn on your own **Sandbox** and let the assistant run scripts, process your files, and save the results back to your workspace. See [Resources in Chat](#resources-in-chat) and [Sandbox](#sandbox). 🥳
 
-Workavera keeps your projects, tasks, documents, calendar, saved links, and contacts in one place, and Chat is how you put them in motion: the assistant works through the same capabilities your account already has—finding context, creating and updating records—and the server re-authorizes every action against your own permissions before it is applied.
+> ⚠️ **Early-stage software (0.x).** Features are still changing quickly and releases may include breaking changes (see the [changelog](./CHANGELOG.md)). Back up your data before upgrading, and don't rely on it for production work yet.
+
+Workavera is a workspace for freelancers and small teams: plan projects, write documents, keep a calendar, save things to read later, and store your files—all on your own server. Chat ties it together. Ask the assistant to plan a project, pull together what's due this week, answer questions about a PDF, or tidy up your files, and it does the work right in your workspace, with exactly the permissions your account has.
+
+## What you can do
+
+- **Plan projects on Boards.** Kanban boards with your own workflow states, labels, members, and due dates, plus ten ready-made project templates in English and Chinese. Share a read-only timeline with clients through a public link.
+- **Write and share Docs.** A rich-text editor with version history, Markdown and HTML export, and AI editing. Publish a document as a public page anyone can read, no account needed.
+- **See your schedule in Calendar.** Personal events and Board deadlines in one view, with recurring events and reminders.
+- **Get things done in Chat.** The assistant searches your workspace, creates and updates tasks, events, and documents, and shows its reasoning and every step it takes. Conversations keep going after you close the browser, and long-term memory is there if you want it.
+- **Keep your files in Resources.** Upload PDFs, Office documents, text, code, images, and archives; search them, filter by type, and attach them in Chat with `+` or `#`. The assistant reads the text inside your documents, so you can ask questions about them.
+- **Let the assistant work in a Sandbox.** Turn on a Linux workspace of your own and the assistant can run commands and Python or Node scripts on your files—OCR a scanned PDF, clean up a spreadsheet, batch-rename files—and save the results back to Resources and Docs.
+- **Read, discover, and summarize.** Save links and notes to Reading, follow your favorite sources in Discover, and get AI summaries of what's new.
+- **Find your team in Contacts.** A searchable team directory with personal favorites.
 
 ## Why Workavera
 
-Self-hosted AI tools are a crowded space, and most of them sit on one of two sides:
-
-- **Chat front-ends** (Open WebUI, LibreChat, and similar) put a UI over model APIs. The conversation is the whole product—there is no workspace behind it for the AI to act on.
-- **Knowledge workspaces** (AFFiNE, AppFlowy, and similar) manage notes and projects, with AI attached as a writing assistant. The AI suggests text; it doesn't operate the workspace.
-
-Workavera is an attempt at the middle:
-
-- **Permission-aware AI tool calling.** Chat can search your context and operate Board, Calendar, Docs, Reading, and Contacts—but only within the permissions your account already has, and the server re-authorizes every tool call (identity, role, ownership, revision). The AI is never a privileged service account.
-- **One self-contained binary.** The frontend is embedded via `go:embed` and data lives in PocketBase/SQLite—no Postgres, Redis, or vector-database stack. Deploy with a single `docker run` or a single downloaded binary.
-- **Reachable from the AI tools you already use.** The same tools are exposed over MCP at `/api/mcp`, so clients such as Claude Code and Cursor can work against your workspace with a scoped API key.
-- **Bring your own model.** Configure API keys for providers you already pay for, or point Chat at a model running on your own hardware. Workavera ships no model and runs no inference of its own, and it is open source under Apache-2.0.
-
-## Data privacy
-
-Self-hosting settles most of it: projects, tasks, docs, calendar, reading list, contacts, and the full chat history live in the `pb_data` SQLite file on your own machine. Workavera has no telemetry and no vendor backend. The only traffic that leaves the server is traffic you configured—calls to the model provider you added in Settings, and any external MCP servers you connected.
-
-The model call is usually the last piece of data that goes to a third party, and you can keep that in-house too. A local server is added in Settings exactly like a hosted provider, and all four protocols are available for it—OpenAI, OpenAI-compatible, Anthropic Messages, and Google—so LM Studio, Ollama, vLLM, and llama.cpp all fit; pick the protocol matching the endpoint your server exposes.
-
-| Field | Value |
-| --- | --- |
-| Protocol | whichever endpoint the server exposes. LM Studio serves both OpenAI-compatible and Anthropic-compatible; Ollama serves OpenAI-compatible |
-| Base URL | the server's origin, e.g. `http://127.0.0.1:1234` for Anthropic, `http://127.0.0.1:1234/v1` for the OpenAI protocols (Ollama: port 11434) |
-| Model ID | whatever the server reports, e.g. `qwen/qwen3.8-27b` |
-| API key | leave empty—local servers do not check it |
-
-This is a supported path, not a theoretical one. A 27B-class local model—Qwen3.8 27B, MLX 4-bit, about 16 GB on disk—served by LM Studio on a single Apple silicon Mac, reached over its Anthropic-compatible endpoint, runs Chat end to end: multi-turn reasoning, workspace tool calls against Board, Calendar, Docs and Reading, and external MCP tools on top. With that setup the whole loop—your workspace data, the prompts built from it, the tool results—stays on your own hardware, and Workavera keeps working with the network unplugged.
-
-Two things worth knowing before you rely on it:
-
-- **Tool calling is where small models break first.** Answer quality degrades gently as models get smaller; the ability to emit well-formed tool calls turn after turn does not. Prefer a model with solid tool-calling support, and expect roughly 16 GB of free memory for a 27B 4-bit quantization.
-- **A local model does not make external MCP servers local.** If you connect a hosted MCP server (web search, for example), the arguments the model sends it still leave your machine.
-
-The base URL is dialed by the Workavera server, not by your browser. If Workavera runs in a container whose network mode cannot see the host's `127.0.0.1`, point it at `http://host.docker.internal:1234` instead.
+- **An assistant that does the work, not just talks about it.** Most self-hosted AI tools are either a chat window over a model or a notes app with an AI writing helper. In Workavera the assistant operates your workspace—and can never do more than your own account is allowed to.
+- **Your data stays with you.** Everything lives on your own server, with no telemetry and no vendor backend. Use the model provider you already pay for, or a model running on your own machine so nothing leaves your hardware.
+- **Native mobile apps.** Open-source Android and iOS apps, built natively for phones and tablets, with an Agenda home screen widget—not a web page wrapped in an app. See [Mobile apps](#mobile-apps).
+- **Simple to run.** Written in pure Go with no CGO, Workavera ships as one self-contained binary with the web app and database built in. One download or one `docker run`—no runtime to install, no database to set up.
+- **Works with the AI tools you already use.** Connect Claude Code, Cursor, and other MCP clients to your workspace with an API key, and bring external MCP tools into Chat.
 
 ## Screenshots
 
@@ -55,6 +40,10 @@ The base URL is dialed by the Workavera server, not by your browser. If Workaver
 ### DeepSeek creating a project and calendar plan
 
 ![Workavera Chat using DeepSeek and workspace tools to create project tasks and calendar events](./screenShot/en/chat-deepseek.png)
+
+### Resources in Chat
+
+![Workavera Chat listing every uploaded resource and sending them back as file cards with previews and download buttons](./screenShot/en/chat-res.png)
 
 ### Board
 
@@ -84,26 +73,36 @@ The base URL is dialed by the Workavera server, not by your browser. If Workaver
 
 ![Workavera Settings with DeepSeek configured as the default model](./screenShot/en/settings.png)
 
-## Mobile apps (preview)
+## Get started
 
-Native Workavera clients for Android and iOS are in active development. They
-connect directly to your self-hosted Workavera server, bringing your workspace
-to phones and tablets without routing its data through a separate service.
+Run Workavera with Docker:
+
+```bash
+docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workavera:latest
+```
+
+Or download the binary for your platform from [GitHub Releases](https://github.com/xusenlin/workavera/releases) and run `./workavera serve`.
+
+Then open <http://127.0.0.1:8090>, sign in as `demo@workavera.local` with password `workavera`, change the password in Profile, and add a model in Settings—Chat is ready to go. The [self-hosting guide](./doc/self-hosting.md) covers the admin account, local models, server requirements, and instance settings.
+
+### Sandbox
+
+The sandbox is optional: each user who turns it on in **Settings → Sandbox** gets a Linux workspace of their own, where the assistant runs commands and scripts and moves files to and from Resources and Docs. It needs Docker on the server and Workavera running as the downloaded binary rather than the Docker image; see [Sandbox in the self-hosting guide](./doc/self-hosting.md#sandbox) for setup and security notes.
+
+## Mobile apps
+
+Native, open-source Workavera apps for Android and iOS are out. They connect straight to your own server and put Board, Docs, Calendar, Chat, Reading, Contacts, and notifications on your phone and tablet, and an Agenda home screen widget shows your next deadlines and events at a glance.
 
 - **[Download Workavera for Android](https://github.com/xusenlin/workavera-android/releases/latest)**
-  from GitHub Releases. It is built with Kotlin and Jetpack Compose, and its
-  [source code](https://github.com/xusenlin/workavera-android) is open.
+  from GitHub Releases. Built with Kotlin and Jetpack Compose;
+  [source code](https://github.com/xusenlin/workavera-android).
 - **[Get Workavera for iOS on the App Store](https://apps.apple.com/app/workavera/id6794339518).**
-  The native SwiftUI app supports iPhone and iPad, and its
-  [source code](https://github.com/xusenlin/workavera-ios) is open.
-
-Both apps are early previews; features may be incomplete or trail the web app
-while development continues.
+  A native SwiftUI app for iPhone and iPad;
+  [source code](https://github.com/xusenlin/workavera-ios).
 
 ### Server compatibility
 
-An app talks to the server's collections directly, so it needs a server new
-enough to have the ones it queries. Upgrade the server first, then the apps.
+The apps need a server at least as new as the table below; upgrade the server first, then the apps.
 
 | Android / iOS | Requires server | Because |
 | --- | --- | --- |
@@ -111,109 +110,29 @@ enough to have the ones it queries. Upgrade the server first, then the apps.
 | 1.0.2 | 0.0.10 or newer | task archiving reads `board_tasks.archived` |
 | 1.0.1 | 0.0.9 or newer | user-owned MCP servers read `mcp_servers` |
 
-A newer server keeps older apps working, minus what they do not know about: an
-app older than 1.0.2 does not filter archived tasks, so archived tasks stay
-visible on its Board.
+## Documentation and roadmap
 
-## Quick start
+The [self-hosting guide](./doc/self-hosting.md) covers installation, first-run setup, privacy and local models, the sandbox, and building from source.
 
-No toolchain needed—run the prebuilt image or binary.
+The roadmap below lists each feature with the server version that first shipped it: ✅ done, ⬜ not started yet. A proposal whose product document is marked pending review is open for feedback before work begins.
 
-### Docker
-
-```bash
-docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workavera:latest
-```
-
-### Prebuilt binary
-
-Download the archive for your platform from [GitHub Releases](https://github.com/xusenlin/workavera/releases), extract it, and start the server from a terminal (it is a server process, so double-clicking the binary is not enough):
-
-```bash
-./workavera serve            # workavera.exe serve on Windows
-```
-
-By default it listens on <http://127.0.0.1:8090>. Pass `--http=0.0.0.0:8090` to accept connections from other machines.
-
-### First-run setup
-
-1. **Sign in with the demo user.** A fresh data directory automatically gets one application user: `demo@workavera.local` with password `workavera`.
-2. **Secure the account.** Change the demo password from Profile before exposing Workavera to other machines or the public internet.
-3. **Create the superuser.** PocketBase prints a one-time setup link containing a token, e.g. `http://127.0.0.1:8090/_/#/pbinstal/<token>`. Find it in the terminal output (or in `docker logs` for a detached container), open it, and create the superuser used to manage collections and application users. The superuser itself cannot sign in to Workavera.
-4. **Add a model.** In Settings, add at least one model configuration before using Chat or AI summaries.
-
-The demo user is seeded only when the `users` collection is empty, so upgrades do not add or overwrite an account in an existing workspace.
-
-Instance-wide settings live in the `configs` collection, which only superusers can edit in the PocketBase dashboard. Besides the [sandbox](#sandbox) keys, `chat.max_steps` (default `80`, from 2 to 500) caps the model calls of one Chat response; the last one cannot call tools, so a response that reaches the cap still ends with a summary. `resources.max_file_size_mb` (default `10`, from 1 to 100) is the largest file accepted in Resources, for uploads and sandbox exports alike.
-
-### Memory for file conversion
-
-Resources converts uploaded documents with an embedded WebAssembly module that is compiled to native code once and cached in `anydoc_cache/` next to `pb_data`. That compilation briefly needs about **550 MB** of memory and runs in the background right after startup: on first deployment, after an upgrade, on a new CPU, and after a container is rebuilt. Size the host for that peak, not for the near-zero usage while idle; each conversion in progress then needs up to about 100 MB. If the compilation cannot run, the rest of Workavera still works and only resource uploads are unavailable. The cache holds no user data and is safe to delete, which only costs one recompilation.
-
-Download links the assistant creates for resources are only issued when the server's Application URL (PocketBase settings) uses HTTPS.
-
-### Sandbox
-
-The sandbox gives each user who turns it on in Settings a Linux container of their own (`workavera-<user ID>`, with `/workspace` in a named volume) where the Chat assistant runs commands, writes Python and Node scripts, and moves files to and from Resources and Docs. It needs:
-
-- **Workavera running directly on the host** as the prebuilt binary, not in the Docker image. When Workavera runs in a container, the sandbox is refused: reaching Docker from there means mounting the host's Docker socket or running Docker-in-Docker with `--privileged`, and either hands the whole host to a network-facing service. The official image therefore keeps no Docker CLI.
-- **Docker on the host**, with a `docker` command on the `PATH` that the system user running Workavera may use. On Linux that usually means the `docker` group, which is equivalent to root, so prefer a dedicated host or VM, or rootless Docker.
-
-The image `ghcr.io/xusenlin/workavera-sandbox` (from [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox)) is pulled on first use. Superusers control the sandbox in the PocketBase dashboard (`/_/`) through these records of the `configs` collection; invalid values are refused on save:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `sandbox.enabled` | `true` | Master switch; `false` stops every sandbox container |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:3"` | Image for new and rebuilt containers, e.g. a mirror |
-| `sandbox.network` | `true` | Network master switch; `false` takes every sandbox offline |
-| `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | Per-container limits, applied to existing containers at once |
-| `sandbox.idle_timeout_minutes` | `60` | Stop a container after this long without use; `0` never stops it |
-
-Security notes: containers share the host kernel and are no boundary for malicious code, so put an instance open to untrusted users on its own host or VM. A sandbox with network access can reach ports published on the host, the local network, and cloud metadata endpoints such as `169.254.169.254`; restrict the `workavera-sandbox` network with a firewall or turn `sandbox.network` off. Disk use has no quota, so watch the disk that holds Docker's data. `docker ps -a --filter label=workavera.sandbox=1` lists every sandbox.
-
-## Product areas
-
-One line each; the [product documentation](#product-documentation) below carries the detail.
-
-- **Board** manages Kanban projects with custom workflow states, labels, members and roles, due dates, task activity history, and ten bilingual project templates.
-- **Docs** stores private and project documents with rich-text editing, explicit versions and conflict detection, Markdown/HTML export, AI editing, and public links that serve a published revision to readers without an account.
-- **Calendar** combines personal events and visible Board deadlines in one view, with recurrence and in-app reminders.
-- **Chat** is where you work with the model: durable streaming conversations that survive browser disconnects, with visible reasoning and tool calls, automatic compaction of long conversations, and optional long-term memory that is off by default.
-- **Reading** saves external links and notes with projects, tags, read state, and AI summaries.
-- **Resources** keeps the files you upload, 10 MB each by default: documents (PDF, Office, OpenDocument, RTF, EPUB, HTML), text, code, and data files, images, and archives. Text is extracted from documents so Chat can attach them with `+` or `#` and the assistant can search and read them; scanned or encrypted documents are kept without text and can be OCRed in the sandbox.
-- **Sandbox** gives each user an optional Linux container in which the assistant runs commands and scripts and exchanges files with Resources and Docs; see [Sandbox](#sandbox) for its requirements.
-- **Contacts** provides a searchable team contact list with personal favorites.
-- **Dashboard, Notifications, and Settings** cover the workspace overview, the in-app notification inbox, model configuration and sharing, appearance, and profile.
-
-## Development
-
-Only needed when contributing or building from source. Requires Go 1.27.2+, Node.js with [pnpm](https://pnpm.io/), and [Task](https://taskfile.dev/) 3+.
-
-```bash
-cd frontend && pnpm install && cd ..   # once
-
-task dev:go     # backend at http://127.0.0.1:8090 (admin UI at /_/)
-task dev:ui     # Vite dev server at http://127.0.0.1:5173
-task test       # go test ./...
-task build      # self-contained binary with the frontend embedded
-task release    # cross-compiled release archives in dist/
-```
-
-All tasks are defined in [`Taskfile.yml`](./Taskfile.yml); frontend-only commands are documented in [`frontend/README.md`](./frontend/README.md).
-
-## Product documentation
-
-| Module | English | 简体中文 |
-| --- | --- | --- |
-| Board | [Board PRD](./doc/board-prd.md) | [Board PRD](./doc/board-prd.zh-CN.md) |
-| Board Public Preview | [Board Public Preview PRD](./doc/board-public-preview-prd.md) | [Board 公开预览 PRD](./doc/board-public-preview-prd.zh-CN.md) |
-| Calendar | [Calendar PRD](./doc/calendar-prd.md) | [Calendar PRD](./doc/calendar-prd.zh-CN.md) |
-| Chat | [Chat PRD and Fantasy architecture](./doc/chat-fantasy-plan.md) | [Chat PRD 与 Fantasy 架构](./doc/chat-fantasy-plan.zh-CN.md) |
-| Chat Memory | [Chat Memory PRD](./doc/chat-memory-prd.md) | [Chat 记忆 PRD](./doc/chat-memory-prd.zh-CN.md) |
-| Docs | [Docs PRD](./doc/docs-prd.md) | [Docs PRD](./doc/docs-prd.zh-CN.md) |
-| MCP Client | [MCP Client Integration PRD](./doc/mcp-client-prd.md) | [MCP 客户端集成 PRD](./doc/mcp-client-prd.zh-CN.md) |
-| Resources | [Resources PRD](./doc/resources-prd.md) | [Resources PRD](./doc/resources-prd.zh-CN.md) |
-| Sandbox | [Sandbox PRD](./doc/sandbox-prd.md) | [Sandbox PRD](./doc/sandbox-prd.zh-CN.md) |
+| | Feature | Version | Product docs |
+| --- | --- | --- | --- |
+| ✅ | Board | 0.0.1 | [PRD](./doc/board-prd.md) · [中文](./doc/board-prd.zh-CN.md) |
+| ✅ | Calendar | 0.0.1 | [PRD](./doc/calendar-prd.md) · [中文](./doc/calendar-prd.zh-CN.md) |
+| ✅ | Chat | 0.0.1 | [PRD](./doc/chat-fantasy-plan.md) · [中文](./doc/chat-fantasy-plan.zh-CN.md) |
+| ✅ | Docs | 0.0.1 | [PRD](./doc/docs-prd.md) · [中文](./doc/docs-prd.zh-CN.md) |
+| ✅ | Reading | 0.0.1 | — |
+| ✅ | Contacts | 0.0.1 | — |
+| ✅ | MCP access for Claude Code, Cursor, and other clients | 0.0.7 | — |
+| ✅ | Chat memory | 0.0.8 | [PRD](./doc/chat-memory-prd.md) · [中文](./doc/chat-memory-prd.zh-CN.md) |
+| ✅ | Connect your own MCP servers to Chat | 0.0.9 | [PRD](./doc/mcp-client-prd.md) · [中文](./doc/mcp-client-prd.zh-CN.md) |
+| ✅ | Public document links | 0.1.0 | — |
+| ✅ | Public project timeline | 0.1.1 | [PRD](./doc/board-public-preview-prd.md) · [中文](./doc/board-public-preview-prd.zh-CN.md) |
+| ✅ | Discover subscriptions and AI summaries | 0.1.1 | — |
+| ✅ | Resources | 0.2.0 | [PRD](./doc/resources-prd.md) · [中文](./doc/resources-prd.zh-CN.md) |
+| ✅ | Sandbox | 0.2.0 | [PRD](./doc/sandbox-prd.md) · [中文](./doc/sandbox-prd.zh-CN.md) |
+| ⬜ | Scheduled tasks | Planned | [PRD](./doc/scheduled-tasks-prd.md) · [中文](./doc/scheduled-tasks-prd.zh-CN.md) — pending review |
 
 ## Changelog
 
