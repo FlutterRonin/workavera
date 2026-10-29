@@ -87,7 +87,7 @@ Then open <http://127.0.0.1:8090>, sign in as `demo@workavera.local` with passwo
 
 ### Sandbox
 
-The sandbox is optional: each user who turns it on in **Settings → Sandbox** gets a Linux workspace of their own, where the assistant runs commands and scripts and moves files to and from Resources and Docs. It needs Docker on the server and Workavera running as the downloaded binary rather than the Docker image; see [Sandbox in the self-hosting guide](./doc/self-hosting.md#sandbox) for setup and security notes.
+The sandbox is optional: each user who turns it on in **Settings → Sandbox** gets a Linux workspace of their own, where the assistant runs commands and scripts and moves files to and from Resources and Docs. Its image, with Python, Node.js, pandoc, OCR, and other everyday tools ready to use, is built in [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox). It needs Docker on the server and Workavera running as the downloaded binary rather than the Docker image; see [Sandbox in the self-hosting guide](./doc/self-hosting.md#sandbox) for setup and security notes.
 
 ## Mobile apps
 

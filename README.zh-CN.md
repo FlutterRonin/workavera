@@ -87,7 +87,7 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 
 ### 沙箱（Sandbox）
 
-沙箱是可选功能：在 **Settings → Sandbox** 中开启后，每位用户都会获得一个属于自己的 Linux 工作空间，助手可以在里面运行命令和脚本，并在沙箱与 Resources、Docs 之间搬运文件。它需要服务器上安装 Docker，并以下载的二进制而不是 Docker 镜像运行 Workavera；部署方式和安全提醒见[自托管指南中的沙箱部分](./doc/self-hosting.zh-CN.md#沙箱sandbox)。
+沙箱是可选功能：在 **Settings → Sandbox** 中开启后，每位用户都会获得一个属于自己的 Linux 工作空间，助手可以在里面运行命令和脚本，并在沙箱与 Resources、Docs 之间搬运文件。沙箱镜像预装了 Python、Node.js、pandoc、OCR 等常用工具，由 [xusenlin/workavera-sandbox](https://github.com/xusenlin/workavera-sandbox) 仓库构建。它需要服务器上安装 Docker，并以下载的二进制而不是 Docker 镜像运行 Workavera；部署方式和安全提醒见[自托管指南中的沙箱部分](./doc/self-hosting.zh-CN.md#沙箱sandbox)。
 
 ## 移动客户端
 
