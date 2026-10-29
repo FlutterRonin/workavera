@@ -35,7 +35,7 @@ const (
 
 // summaryColumns are every column a listing needs. converted_markdown is
 // deliberately absent: it can be 8 MiB per row and is never listed.
-var summaryColumns = []string{"id", "display_name", "original_name", "media_type", "size", "created", "updated"}
+var summaryColumns = []string{"id", "display_name", "original_name", "media_type", "size", "no_text_reason", "created", "updated"}
 
 type summaryRow struct {
 	ID           string         `db:"id"`
@@ -43,6 +43,7 @@ type summaryRow struct {
 	OriginalName string         `db:"original_name"`
 	MediaType    string         `db:"media_type"`
 	Size         int64          `db:"size"`
+	NoTextReason string         `db:"no_text_reason"`
 	Created      types.DateTime `db:"created"`
 	Updated      types.DateTime `db:"updated"`
 }
@@ -54,8 +55,10 @@ type ListItem struct {
 	MediaType string `json:"mediaType"`
 	Size      int64  `json:"size"`
 	MatchedIn string `json:"matchedIn,omitempty"`
-	Created   string `json:"created"`
-	Updated   string `json:"updated"`
+	// NoText says why the resource has no Markdown to search or read.
+	NoText  string `json:"noText,omitempty"`
+	Created string `json:"created"`
+	Updated string `json:"updated"`
 }
 
 type ListResult struct {
@@ -140,6 +143,7 @@ func appendItems(items []ListItem, rows []summaryRow, matchedIn string) []ListIt
 			MediaType: row.MediaType,
 			Size:      row.Size,
 			MatchedIn: matchedIn,
+			NoText:    row.NoTextReason,
 			Created:   formatTime(row.Created),
 			Updated:   formatTime(row.Updated),
 		})
@@ -224,13 +228,28 @@ func Search(ctx context.Context, app core.App, ownerID, resourceID, query string
 	return result, nil
 }
 
-// requireText rejects binary resources, which have no Markdown to search or
-// read.
+// requireText rejects resources stored without Markdown, saying why.
 func requireText(record *core.Record) error {
-	if IsBinary(record.GetString("media_type")) {
-		return newError(CodeResourceHasNoText, http.StatusUnprocessableEntity, "This file has no text representation. It can only be downloaded, or copied into the sandbox with sandbox_import and processed there.")
+	reason := record.GetString("no_text_reason")
+	if reason == "" {
+		return nil
 	}
-	return nil
+	return newError(CodeResourceHasNoText, http.StatusUnprocessableEntity, NoTextDescription(reason)+" It can only be downloaded, or copied into the sandbox with sandbox_import and processed there.")
+}
+
+// NoTextDescription explains to a model why a resource has no text.
+func NoTextDescription(reason string) string {
+	switch reason {
+	case NoTextNeedsOCR:
+		return "This PDF contains scanned pages, so no text was extracted; OCR in the sandbox can add a text layer."
+	case NoTextEncrypted:
+		return "This document is password-protected, so no text was extracted."
+	case NoTextEmpty:
+		return "No text could be extracted from this file; it may contain only images."
+	case NoTextTooLarge:
+		return "This document is too large or complex for text extraction."
+	}
+	return "This file has no text representation."
 }
 
 // foldRunes lowercases rune by rune, so indexes into the result are indexes
@@ -399,10 +418,11 @@ var errInvalidCursor = newError(CodeInvalidResourceCursor, http.StatusBadRequest
 // Snapshot is the display data a chat message keeps for an attached resource.
 // It is built from the stored record, never from client input.
 type Snapshot struct {
-	ResourceID string
-	Name       string
-	MediaType  string
-	Size       int64
+	ResourceID   string
+	Name         string
+	MediaType    string
+	Size         int64
+	NoTextReason string
 }
 
 // Snapshots resolves the owner's resources by ID, in the order given. Any ID
@@ -433,7 +453,7 @@ func Snapshots(app core.App, ownerID string, ids []string) ([]Snapshot, error) {
 		if !ok {
 			return nil, errNotFound
 		}
-		snapshots = append(snapshots, Snapshot{ResourceID: row.ID, Name: row.DisplayName, MediaType: row.MediaType, Size: row.Size})
+		snapshots = append(snapshots, Snapshot{ResourceID: row.ID, Name: row.DisplayName, MediaType: row.MediaType, Size: row.Size, NoTextReason: row.NoTextReason})
 	}
 	return snapshots, nil
 }

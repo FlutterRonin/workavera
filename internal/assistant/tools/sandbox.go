@@ -96,7 +96,7 @@ func sandboxTools(app core.App, manager *sandbox.Manager, scope workagent.ToolSc
 		),
 		fantasy.NewAgentTool(
 			"sandbox_export",
-			"Save a file from the user's sandbox to Workavera: target=resource adds it to Resources under the rules of an upload (6 MB, supported document, image, and ZIP types); target=doc creates a new document from a .md, .markdown, .html, or .htm file. Never overwrites existing resources or documents; update documents with docs_replace or docs_upsert.",
+			"Save a file from the user's sandbox to Workavera: target=resource adds it to Resources under the rules of an upload (the size limit the administrator sets, 10 MB by default, and the supported document, text, code, image, and archive types); target=doc creates a new document from a .md, .markdown, .html, or .htm file. Never overwrites existing resources or documents; update documents with docs_replace or docs_upsert.",
 			func(ctx context.Context, input sandboxExportInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 				result, err := manager.Export(ctx, actorID, conversationID, sandbox.ExportInput{
 					Path:      input.Path,

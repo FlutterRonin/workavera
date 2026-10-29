@@ -11,12 +11,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 - Resources is a personal library for uploaded files at `/resources`. A PDF,
   Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown,
-  or JSON file of up to 6 MB is stored as it is, and its text is extracted to
-  Markdown in the same request; the server checks the real file type rather
-  than trusting the extension, and an upload that cannot be converted — a
-  password-protected or damaged document, or a PDF with scanned pages, whose
-  page numbers are named — is refused with a clear reason instead of being
-  kept half-usable. Files can be searched by name, opened, downloaded,
+  or JSON file is stored as it is, and its text is extracted to Markdown in
+  the same request; the server checks the real file type rather than
+  trusting the extension, and a damaged document is refused with a clear
+  reason. Files can be searched by name, opened, downloaded,
   renamed, and deleted, and their extracted text can be viewed. In Chat, the
   `+` button or dropping a file uploads it right away, and typing `#` picks an
   existing resource; a message can carry up to six files, with or without
@@ -28,11 +26,17 @@ and versions follow [Semantic Versioning](https://semver.org/).
   it once an external service has fetched the file; links can also be reviewed
   and revoked from the Resources page. Deleting a resource leaves past
   messages intact and marks their attachment as unavailable.
-- Resources also keeps PNG, JPEG, GIF, and WebP images and ZIP archives of up
-  to 6 MB. They are stored and downloaded as they are, without extracted text:
-  the assistant is told an attached image or archive has no text, and searching
-  or reading one reports `resource_has_no_text`. SVG stays unsupported, since
-  it can carry scripts.
+- Resources also keeps files without extracted text: PNG, JPEG, GIF, WebP,
+  TIFF, BMP, and HEIC images; ZIP, TAR, GZIP, and 7z archives; and scanned,
+  password-protected, or textless documents, which no longer fail the upload.
+  The reason is stored with the resource and shown as a "No text" badge, the
+  assistant is told why an attached file has no text, and searching or
+  reading one reports `resource_has_no_text`, so a scanned PDF can be
+  imported into the sandbox and OCRed. Code, configuration, and data files
+  such as `.py`, `.ts`, `.yaml`, `.xml`, `.sql`, `.tsv`, and `.ipynb` are kept
+  as text. SVG stays unsupported, since it can carry scripts. Files may be up
+  to 10 MB by default, and superusers can set the limit from 1 to 100 MB
+  through the `resources.max_file_size_mb` record in `configs`.
 - The assistant can rename up to 50 resources or documents at once with new
   `resources_rename` and `docs_rename` tools, taking an ID and a new name for
   each. A document rename changes only the title, so it needs the current
@@ -62,9 +66,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
   Markdown, or a document into the sandbox on the server, and `sandbox_export`
   saves a sandbox file as a new resource under the upload rules or as a new
   document, so file contents never pass through the model. The default image
-  `ghcr.io/xusenlin/workavera-sandbox:2` brings Python with NumPy, pandas,
-  matplotlib, and openpyxl, Node.js with pnpm, common command-line tools, and
-  CJK fonts, and the system prompt lists what an image declares. Settings shows
+  `ghcr.io/xusenlin/workavera-sandbox:3` brings Python with NumPy, pandas,
+  DuckDB, matplotlib, openpyxl, and Office and PDF libraries, Node.js
+  with pnpm, pandoc, Typst, Poppler, qpdf, Tesseract with Chinese and
+  OCRmyPDF, the DuckDB CLI, Graphviz, common command-line tools, and CJK
+  fonts, and the system prompt lists what an image declares. Settings shows
   the container's state, image, and limits, rebuilds it when the image changes,
   lets the user take it offline, and resets the workspace after confirmation.
   Superusers control the feature, image, network, limits, and idle stop time

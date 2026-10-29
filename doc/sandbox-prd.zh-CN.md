@@ -54,7 +54,7 @@ Sandbox 给每位用户一个属于自己的 Linux 容器，让 Chat 里的 Assi
 8. 服务端从不把宿主机目录挂载进容器，从不把 Docker socket 暴露给容器，从不使用 `--privileged`。
 9. 容器内不注入任何 Workavera 凭证、模型 API key、MCP 凭证或其他用户数据。用户数据只能通过 `sandbox_import` 由用户的 Assistant 显式放入。
 10. 沙箱内的文件内容、命令输出和导入的资源/文档都是不可信数据，不能作为系统指令或工具授权。
-11. 导出到 Resources 时完全遵守资源上传的规则（6 MiB、真实媒体类型检测、允许列表、转换）。导出到 Docs 时遵守文档的权限和校验规则。沙箱不是绕过这些规则的通道。
+11. 导出到 Resources 时完全遵守资源上传的规则（配置的大小上限、真实媒体类型检测、允许列表、转换）。导出到 Docs 时遵守文档的权限和校验规则。沙箱不是绕过这些规则的通道。
 12. 容器状态以 Docker 为准，每次通过 `docker inspect` 读取，不在数据库中保存副本。只有"准备中"、最近一次准备失败的原因和最近活动时间保存在进程内存中。
 
 ## 5. 前置改动：资源库支持二进制资源
@@ -69,10 +69,10 @@ Sandbox 给每位用户一个属于自己的 Linux 容器，让 Chat 里的 Assi
 规则：
 
 1. 二进制资源不调用任何转换器，`converted_markdown` 为空字符串，`converted_size` 为 0。资源是否为二进制由服务端检测到的 `media_type` 决定，不增加新字段。
-2. 6 MiB 上限、真实媒体类型检测、SHA-256 去重、Owner 隔离和下载凭证规则全部照旧。
+2. 大小上限（`configs` 中的 `resources.max_file_size_mb`，默认 10 MB）、真实媒体类型检测、SHA-256 去重、Owner 隔离和下载凭证规则全部照旧。
 3. SVG 不在第一版范围内：它是可以执行脚本的 XML，作为受保护文件直接在浏览器打开时存在 XSS 风险。
 4. ZIP 只作为整体存储和下载，不解压，也不读取其中内容。ZIP 签名同样匹配 OOXML 和 EPUB，因此检测时先匹配这些具体格式，最后才把文件归为普通 ZIP。
-5. 图片型 PDF 仍然按 `document_needs_ocr` 拒绝。PDF 的定位是可阅读的文档，只有页面图片的 PDF 被存为不可读资源会误导用户。需要交付图表时导出图片本身。
+5. 含扫描页的 PDF、加密文档和没有文字的文档作为没有文字的资源保存，原因记录在 `no_text_reason` 中，这样用户的扫描件也能进入沙箱做 OCR。Resources 页面给它们标上"No text"，避免被误当成可阅读的文档。需要交付图表时导出图片本身。现行规则见 Resources PRD 的"没有文字的资源"一节，其中也列出了之后新增的二进制格式：TIFF、BMP、HEIC、TAR、GZIP 和 7z。
 6. `resources_list` 对二进制资源只按名称匹配。`resources_search` 和 `resources_read_markdown` 对二进制资源返回 `resource_has_no_text`，提示该资源只能下载，或用 `sandbox_import` 放入沙箱处理。
 7. Chat 中附加二进制资源时，模型看到的元数据块注明"该文件没有文本表示"，避免 Assistant 尝试读取。
 8. Resources 页面对二进制资源隐藏"查看提取文本"，其余操作（重命名、下载、删除、附加到 Chat）不变。
@@ -116,7 +116,7 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 | key | 默认值 | 说明 |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | 实例总开关。关闭后所有用户都无法使用沙箱 |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | 新建或重建容器时使用的镜像，可以换成镜像加速地址或自建仓库 |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:3"` | 新建或重建容器时使用的镜像，可以换成镜像加速地址或自建仓库 |
 | `sandbox.network` | `true` | 网络总开关。关闭后所有沙箱离线，用户的网络开关不可用 |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | 每个沙箱的资源上限 |
 | `sandbox.idle_timeout_minutes` | `60` | 无活动多少分钟后自动停止容器，`0` 表示不自动停止 |
@@ -154,13 +154,17 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 | --- | --- |
 | 基础 | Ubuntu 26.04 LTS，`LANG=C.UTF-8`，`TZ=Etc/UTC` |
 | Node.js | Node.js 24 LTS、npm 和 pnpm |
-| Python | Python 3，位于 `/opt/venv` 的虚拟环境，内置 uv、NumPy、pandas、matplotlib 和 openpyxl |
+| Python | Python 3，位于 `/opt/venv` 的虚拟环境，内置 uv、NumPy、pandas、DuckDB、matplotlib、openpyxl、python-docx、python-pptx 和 pypdf |
+| 文档 | pandoc（Markdown、HTML、docx、epub 互相转换）、Typst（PDF 排版）、Poppler（`pdftotext`、`pdftoppm`、`pdfimages`）和 qpdf |
+| OCR | Tesseract（简体中文、繁体中文、英文），以及给扫描版 PDF 加文字层的 OCRmyPDF |
+| 数据与图表 | DuckDB 命令行（用 SQL 查询 CSV、Parquet、JSON）和 Graphviz（`dot`） |
 | 命令行工具 | `git`、`curl`、`ca-certificates`、`jq`、`ripgrep`、`unzip`、`zip`、`xz-utils`、`zstd`、`file`、`procps`、`sudo` |
 | 字体 | `fonts-noto-cjk` 与 `fontconfig`；matplotlib 默认使用 Noto Sans CJK SC |
 
 - 不内置 Go。需要时 Assistant 可以用 `sudo` 自行安装。
 - Ubuntu 的系统 Python 不允许直接 `pip install`（PEP 668）。`/opt/venv` 归沙箱用户所有并排在 `PATH` 最前，`python`、`pip` 和 `uv pip` 都直接安装到其中，不需要 `sudo`。
-- 预装 NumPy、pandas、matplotlib 和 openpyxl，是因为沙箱可能处于离线状态，此时无法安装任何依赖。
+- 预装数据、文档和 OCR 工具，是因为沙箱可能处于离线状态，此时无法安装任何依赖。上表中的文档、OCR、数据几行是第 3 版新增的；Typst 和 DuckDB 取自各自的发布包，并用 SHA-256 固定。
+- 为控制镜像体积，不内置 LibreOffice、浏览器和 ffmpeg；任务需要时由 Assistant 用 `sudo` 安装，并记入环境说明。也不内置 anydoc（见第 3 节）。
 - pnpm 直接安装，而不是交给 corepack 在首次使用时下载，因为离线的沙箱无法下载。
 - 中文字体是必需项：没有它，matplotlib 等工具生成的图表和 PDF 中的中文会显示为方框。镜像把 matplotlib 的默认字体设为 Noto Sans CJK SC，Assistant 不需要自己指定。
 
@@ -180,7 +184,7 @@ Workavera 运行在容器中时，要使用沙箱只有两种办法，第一版�
 - 标签随镜像一起复制到镜像加速地址。管理员自建的镜像也可以写同样的标签，描述自己的环境。
 - 没有该标签时，系统提示说明该镜像没有声明工具，使用某个工具前先用命令确认。
 - 沙箱仓库的冒烟测试检查标签存在，并且提到了实际安装的主要工具，避免两者脱节。
-- v1 发布时还没有这个标签，因此 `sandbox.image` 的默认值从 v2 开始。
+- v1 发布时还没有这个标签，因此 `sandbox.image` 的默认值从 v2 开始。v3 新增了文档、OCR 和数据工具，由迁移把默认值移到 v3。
 
 ### 版本与发布
 
@@ -334,14 +338,14 @@ docker run -d
   "enabled": true,
   "online": true,
   "networkAllowed": true,
-  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:2",
+  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:3",
   "limits": { "memory": "1g", "cpus": 2, "pids": 512 },
   "idleTimeoutMinutes": 60,
   "container": {
     "name": "workavera-abc123def456ghi",
     "state": "running",
     "phase": "",
-    "image": "ghcr.io/xusenlin/workavera-sandbox:2",
+    "image": "ghcr.io/xusenlin/workavera-sandbox:3",
     "createdAt": "2026-10-28T08:00:00Z",
     "error": ""
   }
@@ -406,7 +410,7 @@ docker run -d
 把沙箱中的文件保存到资源库或文档。
 
 - 输入：必填 `path` 和 `target`（`resource` 或 `doc`）。可选 `name`：导出为资源时作为显示名称，导出为文档时作为标题，默认取文件名。导出为文档时还可以指定 `folderId` 或 `projectId`，含义与 `docs_upsert` 一致。
-- 导出为资源：先用 `stat` 确认文件大小不超过 6 MiB，再读取字节并调用与上传相同的服务，执行类型检测、允许列表、转换、去重等全部规则，包括第 5 节的二进制资源。返回资源摘要，并附上一句说明：用户下载的是这份原文件；转换出的 Markdown 只供搜索和阅读，可能有损；要核对导出结果，请在沙箱里检查原文件，不要用 `resources_read_markdown`。
+- 导出为资源：先用 `stat` 确认文件大小不超过配置的上限，再读取字节并调用与上传相同的服务，执行类型检测、允许列表、转换、去重等全部规则，包括第 5 节的没有文字的资源。返回资源摘要，并附上一句说明：用户下载的是这份原文件；转换出的 Markdown 只供搜索和阅读，可能有损；要核对导出结果，请在沙箱里检查原文件，不要用 `resources_read_markdown`。
 - 导出为文档：只接受 `.md`、`.markdown`、`.html`、`.htm`，按扩展名确定文档类型，内容必须是合法 UTF-8。第一版只新建文档，不覆盖已有文档，以免绕过文档的版本检查。修改已有文档继续使用 `docs_replace` 或 `docs_upsert`。
 
 ### 系统提示
@@ -463,7 +467,7 @@ docker run -d
 | `export_type_unsupported` | 导出为文档时扩展名不支持，或导出为资源时类型不在允许列表 | 告诉用户支持的类型 |
 | `resource_has_no_text` | 搜索或读取二进制资源 | 说明该资源只能下载，或导入沙箱处理 |
 
-导出为资源时，资源库原有的错误（例如 `document_needs_ocr`、`converted_content_empty`）原样返回。
+导出为资源时，资源库原有的错误（例如 `file_too_large`、`document_malformed`）原样返回。
 
 ## 14. 实现结构
 
@@ -501,7 +505,7 @@ docker run -d
 20. 沙箱工具和接口都不接受容器名或用户 ID 参数，模型或客户端无法指向他人的沙箱：所有操作只使用由认证用户推导的名称。
 21. 通过 PocketBase Records API 修改 `sandbox_enabled` 或 `sandbox_offline` 被拒绝。
 22. MCP Server 的工具列表和 API key 范围内不出现任何 `sandbox_` 工具。
-23. 上传 PNG、JPEG、GIF、WebP、ZIP 资源成功，`resources_read_markdown` 返回 `resource_has_no_text`；上传 SVG 被拒绝；图片型 PDF 仍按 `document_needs_ocr` 拒绝。
+23. 上传 PNG、JPEG、GIF、WebP、TIFF、BMP、HEIC、ZIP、TAR、GZIP、7z 资源成功，`resources_read_markdown` 对它们返回 `resource_has_no_text`；上传 SVG 被拒绝；扫描版 PDF 作为没有文字的资源保存，可以导入沙箱，用 OCRmyPDF 识别后导出为有文字的可搜索 PDF。
 24. 使用默认镜像时，系统提示包含其 `org.workavera.sandbox.tools` 标签的内容，且容器停止时不会因此被启动；把 `sandbox.image` 换成没有该标签的镜像并重建后，系统提示改为要求先用命令确认工具。
 
 ## 16. 已确定的产品选择

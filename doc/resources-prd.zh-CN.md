@@ -16,7 +16,7 @@ Resources 是 Workavera 的用户级通用静态资源层。用户上传一次�
 
 - 为每位用户提供私有、跨模块可复用的通用资源集合。
 - 保存真实源文件、受保护的源文件地址、原始名称、显示名称、服务端检测的媒体类型、大小和内容哈希。
-- 严格拒绝空文件和超过 6 MiB 的源文件。
+- 严格拒绝空文件和超过配置上限的源文件。上限由 `configs` 中的 `resources.max_file_size_mb` 设置，默认 10 MB，最大 100 MB。
 - 使用 `xusenlin/go-anydoc` 在上传请求内同步把支持的办公文档、PDF 等源文件转换为 Markdown，HTML 使用 `html-to-markdown` 转换，纯文本格式直通保存。
 - 允许用户列出、搜索、上传、重命名、下载和删除自己的资源。
 - 允许用户在聊天输入框内直接上传文件，或用触发符引用自己已有的资源。
@@ -48,7 +48,7 @@ Resources 是 Workavera 的用户级通用静态资源层。用户上传一次�
 ## 4. 核心规则
 
 1. `user_resources.file` 保存权威源文件；`converted_markdown` 是可重新生成的 AI 阅读表示。
-2. 单个源文件必须大于 0 字节且不超过 `6 * 1024 * 1024` 字节，即 6,291,456 字节。
+2. 单个源文件必须大于 0 字节且不超过配置的上限。超级管理员通过 `configs` 集合中的 `resources.max_file_size_mb` 记录以 MB 为单位设置，取值 1 到 100；记录不存在时为 10 MB。上限同时作用于用户上传和沙箱导出，修改后从下一次上传开始生效。请求体、文件字段和转换器的输入上限都按 100 MB 的最高值设置。
 3. 文件扩展名和浏览器提交的 MIME 只作为提示；服务端必须检测真实媒体类型并根据允许列表校验。
 4. 资源始终属于一个用户，只有 Owner 可以查看、管理、引用和创建下载凭证。
 5. 受保护的源文件地址需要 Workavera 用户认证，不能直接充当外部公开下载地址。
@@ -73,6 +73,8 @@ Resources 是 Workavera 的用户级通用静态资源层。用户上传一次�
 | --- | --- | --- |
 | 文本 | `.txt`、`.md` | `text/plain`、`text/markdown` |
 | JSON | `.json`、`.jsonl` | `application/json`、`application/x-ndjson` |
+| 数据与配置 | `.tsv`、`.log`、`.ipynb`、`.xml`、`.yaml`、`.yml`、`.toml`、`.ini`、`.cfg`、`.conf`、`.env`、`.sql` | `text/tab-separated-values`、`application/x-ipynb+json`、`application/xml`、`application/yaml` 等 |
+| 代码 | `.py`、`.js`、`.mjs`、`.cjs`、`.ts`、`.tsx`、`.jsx`、`.go`、`.rs`、`.java`、`.kt`、`.swift`、`.c`、`.h`、`.cpp`、`.cc`、`.hpp`、`.cs`、`.rb`、`.php`、`.lua`、`.r`、`.css`、`.scss`、`.vue`、`.svelte`、`.sh`、`.bash`、`.zsh` | `text/x-python`、`text/javascript`、`text/x-go` 等 |
 
 这些格式本身就是文本。服务端校验其为合法 UTF-8 后原样写入 `converted_markdown`，不调用任何解析器。非 UTF-8 内容按 `unsupported_encoding` 拒绝。
 
@@ -95,7 +97,7 @@ Resources 是 Workavera 的用户级通用静态资源层。用户上传一次�
 
 转换结果最大 8 MiB UTF-8 字节，超过上限按 `converted_content_too_large` 拒绝上传。转换成功但正文为空时按 `converted_content_empty` 拒绝，不能把占位提示当成有效正文。
 
-含有图片型页面的 PDF 由转换器直接拒绝（`ErrNeedsOCR`），按 `document_needs_ocr` 返回，并在错误描述中带上需要 OCR 的页码，例如"第 28–37 页需要 OCR"。只有部分页面是扫描件时同样整份拒绝，不接受缺页的 Markdown——否则 Assistant 会在不知情的情况下基于残缺内容回答。
+转换器不转换含有图片型页面的 PDF（`ErrNeedsOCR`）。缺页的 Markdown 一律不保存，否则 Assistant 会在不知情的情况下基于残缺内容回答，因此这类 PDF（包括只有部分页面是扫描件的）作为没有文字的资源保存（`no_text_reason = needs_ocr`，见下文"没有文字的资源"）。用户仍然可以下载，也可以在[沙箱](./sandbox-prd.zh-CN.md)中做 OCR，加上文字层后导出一份可搜索的副本。
 
 已知限制：go-anydoc（截至 v0.3.1 实测）对非 UTF-8 编码的 CSV（GBK、Big5、Shift_JIS）会解码为乱码，上游 `firecrawl/anydoc` 尚未处理。第一版在服务端把 CSV 字节先探测编码并转成 UTF-8 再交给转换器，规避该问题。
 
@@ -117,30 +119,42 @@ anydoc 不解析 HTML，因此 HTML 走独立路径，使用纯 Go 的 `github.c
 
 - 只转换上传的字节，不抓取外部样式、图片、框架或链接目标，不存在 SSRF；相对链接原样保留，不解析为绝对地址；
 - 不做正文提取（不像 Reading 那样只保留文章主体），导航、页脚等内容随页面一起保留——这是用户自己的文件，原样转换符合"源文件是权威内容"的定位；
-- 转换在主进程内进行，没有 wasm 沙箱，也不能像 wasm guest 那样被 context 中途中断（该库接受 context 但不检查取消）。有界性来自输入本身：6 MiB 上限加上线性复杂度的 HTML 解析，单次转换的时间和内存都随输入线性增长；HTML 转换同样占用转换信号量，避免与 go-anydoc 转换叠加超出内存预算；
+- 转换在主进程内进行，没有 wasm 沙箱，也不能像 wasm guest 那样被 context 中途中断（该库接受 context 但不检查取消）。有界性来自输入本身：大小上限加上线性复杂度的 HTML 解析，单次转换的时间和内存都随输入线性增长；HTML 转换同样占用转换信号量，避免与 go-anydoc 转换叠加超出内存预算；
 - `.mhtml`、`.webarchive` 等打包格式不在此路径内，仍不支持。
 
-### 二进制资源
+### 没有文字的资源
 
-图片和 ZIP 压缩包（最常见的来源是[沙箱](./sandbox-prd.zh-CN.md)）作为二进制资源保存，规则对用户上传和沙箱导出完全相同。
+部分资源不保存 Markdown，规则对用户上传和沙箱导出完全相同，原因记录在 `no_text_reason` 中：
+
+| `no_text_reason` | 情形 |
+| --- | --- |
+| `binary` | 下表的二进制格式，不调用转换器 |
+| `needs_ocr` | 含扫描页（只有图片）的 PDF |
+| `encrypted` | 有密码保护的文档 |
+| `empty` | 能解析但没有文字的文档，例如全是图片的幻灯片 |
+| `too_complex` | 超出转换器内存上限，或 Markdown 会超过 8 MiB 的文档 |
+
+文件损坏（`document_malformed`）、转换超时和其他转换失败仍然使上传失败：前者可能是文件没传完整，后者值得重试。
+
+二进制格式（最常见的来源是沙箱）：
 
 | 类别 | 扩展名 | 媒体类型 |
 | --- | --- | --- |
-| 图片 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp` | `image/png`、`image/jpeg`、`image/gif`、`image/webp` |
-| 压缩包 | `.zip` | `application/zip` |
+| 图片 | `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.tif`、`.tiff`、`.bmp`、`.heic` | `image/png`、`image/jpeg`、`image/gif`、`image/webp`、`image/tiff`、`image/bmp`、`image/heic` |
+| 压缩包 | `.zip`、`.tar`、`.gz`、`.tgz`、`.7z` | `application/zip`、`application/x-tar`、`application/gzip`、`application/x-7z-compressed` |
 
-- 不调用任何转换器，`converted_markdown` 为空字符串，`converted_size` 为 0。资源是否为二进制由服务端检测到的 `media_type` 决定，不增加新字段。
-- 6 MiB 上限、真实媒体类型检测、SHA-256 去重、Owner 隔离和下载凭证规则全部照旧。
+- `converted_markdown` 为空字符串，`converted_size` 为 0。
+- 大小上限、真实媒体类型检测、SHA-256 去重、Owner 隔离和下载凭证规则全部照旧。
+- 只有 PNG、JPEG、GIF、WebP 生成缩略图并能在页面内预览；TIFF、BMP、HEIC 并非所有浏览器都能显示，只提供下载。
 - 不支持 SVG：它是可以执行脚本的 XML，作为受保护文件直接在浏览器打开时存在 XSS 风险。
 - ZIP 只作为整体存储和下载，不解压，也不读取其中内容。ZIP 签名同样匹配 OOXML 和 EPUB，检测器会优先识别这些具体格式；以 `.zip` 上传的这类文件仍然是 ZIP 压缩包。
-- 图片型 PDF 仍然按 `document_needs_ocr` 拒绝；需要交付图表时导出图片本身。
-- `resources_list` 对二进制资源只按名称匹配。`resources_search` 和 `resources_read_markdown` 对二进制资源返回 `resource_has_no_text`，说明该文件只能下载，或用 `sandbox_import` 放入沙箱处理。
-- Chat 中附加二进制资源时，模型看到的元数据块注明该文件没有文本表示。
-- Resources 页面对二进制资源隐藏"查看提取文本"，重命名、下载、删除、附加到 Chat 不变。
+- `resources_list` 对没有文字的资源只按名称匹配，并以 `noText` 返回原因。`resources_search` 和 `resources_read_markdown` 返回 `resource_has_no_text`，说明具体原因（例如"该 PDF 含扫描页"），并说明可以下载，或用 `sandbox_import` 放入沙箱处理。
+- Chat 中附加这类资源时，模型看到的元数据块注明它为什么没有文字。
+- Resources 页面对这类资源隐藏"查看提取文本"，并给没有文字的文档加上"No text"标记，悬停显示原因；重命名、下载、删除、附加到 Chat 不变。
 
 ### 不支持的格式
 
-第一版不接受 XML/RSS/Atom、Jupyter Notebook、MHTML/Web Archive、SVG 及上文未列出的其他图片、音频、视频、可执行文件和其他未列出的格式。
+资源库不接受 MHTML/Web Archive、SVG 及上文未列出的其他图片、音频、视频、可执行文件和其他未列出的格式。XML、RSS、Atom 文件作为纯文本保存，不解析为订阅源。
 
 ## 6. 数据模型
 
@@ -149,19 +163,20 @@ anydoc 不解析 HTML，因此 HTML 走独立路径，使用纯 Go 的 `github.c
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `owner` | relation → users | 必填，用户删除时级联删除 |
-| `file` | protected file | 权威源文件，单文件，最大 6 MiB |
+| `file` | protected file | 权威源文件，单文件，不超过配置上限（字段本身允许 100 MB 的最高值）；PNG、JPEG、GIF、WebP 生成 `480x0` 缩略图 |
 | `original_name` | text | 上传时原始文件名，最长 255 字符，创建后不可变 |
 | `display_name` | text | 用户可编辑显示名称，默认等于原始文件名，最长 255 字符 |
 | `media_type` | text | 服务端检测并规范化的媒体类型，创建后不可变 |
 | `size` | number | 服务端确认的源文件字节数，创建后不可变 |
 | `sha256` | hidden text | 源文件 SHA-256，创建后不可变 |
-| `converted_markdown` | text | 转换或直通得到的完整 Markdown，最大 8 MiB，创建后不可变；二进制资源为空 |
+| `converted_markdown` | text | 转换或直通得到的完整 Markdown，最大 8 MiB，创建后不可变；没有文字的资源为空 |
 | `converted_size` | number | Markdown 的 UTF-8 字节数 |
+| `no_text_reason` | select | 有 Markdown 的资源为空；否则为 `binary`、`needs_ocr`、`encrypted`、`empty` 或 `too_complex`，创建后不可变 |
 | `created`、`updated` | autodate | 记录时间 |
 
 同一 Owner 下 `sha256 + original_name` 唯一。上传相同内容和相同原始文件名时复用现有资源；相同内容但不同原始文件名视为不同资源，避免用户意外合并不同语义的文件。
 
-记录一定具备源文件，除二进制资源外也一定具备非空 `converted_markdown`——转换失败的上传根本不会落库，因此不存在"存在但不可用"的中间态，读取方不需要判断状态。
+记录一定具备源文件；当且仅当 `no_text_reason` 为空时具备非空 `converted_markdown`，读取方只需检查这一个字段。因其他原因转换失败的上传不会落库。
 
 除 `display_name` 外，资源记录在创建后不再变化。发放和撤销下载链接不写这张表，因此 `updated` 始终反映用户对资源本身的操作。
 
@@ -193,7 +208,7 @@ Records API 只允许 Owner list/view，且 `token_hash` 始终不可读。创�
 服务端按顺序执行：
 
 1. 验证当前用户和上传字段；
-2. 验证原始名称和严格 6 MiB 大小上限；
+2. 验证原始名称和配置的大小上限；
 3. 从文件内容检测媒体类型并匹配允许列表；
 4. 计算 SHA-256 并查询可复用资源，命中则直接返回；
 5. 按格式选择直通、go-anydoc 或 HTML 路径，在内存中得到 Markdown；
@@ -753,7 +768,7 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - `invalid_resource_cursor`
 - `download_lease_expired`
 
-`document_encrypted`、`document_malformed` 和 `document_needs_ocr` 由转换器的错误分类（`ErrEncrypted`、`ErrMalformed`、`ErrNeedsOCR`）直接映射，用于把"文件有密码"、"文件损坏"和"含扫描页"跟"格式不支持"区分开。
+`document_encrypted`、`document_malformed` 和 `document_needs_ocr` 由转换器的错误分类（`ErrEncrypted`、`ErrMalformed`、`ErrNeedsOCR`）直接映射，用于把"文件有密码"、"文件损坏"和"含扫描页"跟"格式不支持"区分开。上传现在把加密和扫描的文档，以及输出为空或过大的文档，作为没有文字的资源保存，因此只有 `document_malformed`、超时和 `conversion_failed` 仍会使上传失败；其他错误码保留给导出和日志使用。
 
 底层解析器错误、堆栈、文件路径和第三方诊断只写服务端日志；API 和 Assistant 工具只返回稳定代码与安全描述。
 
@@ -766,7 +781,7 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - 成功资源同时保存受保护源文件、元数据、SHA-256 和非空转换 Markdown；二进制资源不保存 Markdown。
 - 上传 PNG、JPEG、GIF、WebP、ZIP 成功，`resources_read_markdown` 对它们返回 `resource_has_no_text`；上传 SVG 被拒绝。
 - 转换失败、超时或输出为空/过大时上传整体失败，不留下任何资源记录和孤儿文件，并返回稳定错误码。
-- 含扫描页的 PDF（无论全部还是部分页面）在上传时被拒绝，并明确告知需要 OCR 的页码。
+- 含扫描页的 PDF（无论全部还是部分页面）和加密文档作为没有文字的资源保存，标记"No text"并说明原因，可以下载或导入沙箱。
 - 加密文档和损坏文档返回彼此不同、且与"格式不支持"不同的错误码。
 - 用户不能查看、下载、重命名、删除、搜索、读取或创建其他用户资源的下载凭证。
 - 相同 Owner 上传相同内容和原始名称时复用已有资源。
@@ -808,13 +823,13 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 - `resources_list`、`resources_search`、`resources_read_markdown` 出现在 Workavera MCP Server 的工具列表中，权限范围是 API key 的 Owner，且不受 `allow_destructive` 影响；两个下载链接工具不出现在 MCP 工具列表中。
 - 数据库中只存在 `user_resources` 和 `resource_download_leases` 两张集合，没有消息关系表。
 - `.html`/`.htm` 上传后得到保留标题、列表、表格和链接的 Markdown，脚本、样式和 `data:` 内联图片不出现在结果中；非 UTF-8 编码的页面正确解码；转换过程不发出任何网络请求。
-- 扫描 PDF、精确页码读取、OCR、语义搜索、Feed/Notebook、MHTML/Web Archive、SVG 和 Provider file ID 不被第一版误标为已支持。
+- 服务端 OCR、精确页码读取、语义搜索、订阅源解析、MHTML/Web Archive、SVG 和 Provider file ID 不被误标为已支持。
 
 ## 16. 本稿需要确认的产品选择
 
 本稿暂定以下第一版规则，评审时可以独立调整：
 
-1. **转换失败即上传失败**，不创建记录、不保留源文件、不提供重试。代价是扫描版 PDF 和加密文档完全无法进入资源库，用户即便只想留个文件用于下载也不行。若要保留这类文件，就必须重新引入某种"已保存但无正文"的表达。
+1. **取不出文字的文档照样保存，其他转换失败仍使上传失败。** 扫描版、加密、无文字和过大的文档不保存 Markdown，用 `no_text_reason` 标明原因，用户可以保留、下载，并在沙箱中处理（例如对扫描件做 OCR）。文件损坏、转换超时或其他转换失败仍然不创建记录、不保留源文件。
 2. **下载凭证不计次数**，只靠 5 分钟有效期约束，撤销即删除记录。代价是有效期内链接可被无限次下载；换来的是下载路径没有任何数据库写入和并发扣减。
 3. **含明文 token 的 URL 随工具结果持久化进会话历史**，以便 Assistant 在后续步骤或后续轮次把它交给外部工具。代价是数据库里在有效期内存在一份可用凭证，会话导出和备份会带上它。若认为不可接受，替代方案是持久化时抹掉 URL 只保留 `leaseId`，但那样 Assistant 就只能在同一轮内使用该链接。
 4. **撤销工具不需要审批卡**，理由是它只收回权限。若认为任何凭证操作都应留下审批痕迹，可以改为需要审批。
@@ -827,5 +842,5 @@ UI 对这类工具卡的渲染要与普通链接区分：不自动展开、不�
 11. `resources_read_markdown` 单次最多返回 100,000 字符，通过 cursor 实现逻辑全文读取。
 12. **编译器模式配磁盘编译缓存，转换器按需创建、用完关闭，并发上限 2。** 缓存命中时创建实例只需约 7 ms，因此不常驻：空闲时不占内存，转换期间每路最多约 100 MiB，天花板约 200 MiB；转换 1.3 MB 的 PDF 约 0.3 秒——在启动、内存和延迟三方面都优于解释器模式，因此不提供运行模式的降级开关。代价是每次缓存未命中需要约 550 MiB 峰值来完成编译，包括重建容器之后的那一次；启动后台预热把这次编译放在启动阶段。缓存在运行时构建，镜像部署和二进制部署行为一致，不做构建期预热。并发上限 2 是按"上传不是高频操作"设的，需要更高吞吐时上调，天花板随之线性上升。
 13. **跟随 go-anydoc v0.3.1 使用 wazy 运行时。** wazy 源自 wazero，同样纯 Go，在这类工作负载上更快、分配少几个数量级，编译缓存命中后启动约 7 ms、转换 1.3 MB 的 PDF 约 0.3 秒。代价是它很年轻、单作者维护、没有 API 稳定承诺。可以接受的原因是 go-anydoc 由我们自己维护：wazy 版本在 go-anydoc 中锁定，Workavera 只依赖 go-anydoc 的 `New`/`Convert`/`Close` 接口；若 wazy 出现无法接受的问题，可以在 go-anydoc 内换回 wazero（v0.1.3 即是 wazero 实现），Workavera 侧不需要改动。
-14. 第一版不支持 Feed、Jupyter、MHTML/Web Archive、SVG、OCR 和精确页/幻灯片/工作表范围读取。HTML 通过独立的 html-to-markdown 路径支持：anydoc 不解析 HTML，而纯 Go 转换库只增加约 0.7 MB，且复用已有的 `x/net/html`。代价是 HTML 转换不在 wasm 沙箱内、不能中途中断，靠 6 MiB 输入上限和线性解析保证有界。
+14. 资源库不解析订阅源，不支持 MHTML/Web Archive、SVG、服务端 OCR 和精确页/幻灯片/工作表范围读取。HTML 通过独立的 html-to-markdown 路径支持：anydoc 不解析 HTML，而纯 Go 转换库只增加约 0.7 MB，且复用已有的 `x/net/html`。代价是 HTML 转换不在 wasm 沙箱内、不能中途中断，靠大小上限和线性解析保证有界。
 15. **只读资源工具随 MCP 提供，下载链接工具只在 Chat 中提供。** 只读工具与 Docs、Reading 工具同等对待；下载链接是 bearer credential，创建它需要逐次展示目标资源和用途的审批，而 MCP 侧没有对应的确认界面。代价是 MCP 客户端拿不到源文件原件，只能阅读转换后的 Markdown。

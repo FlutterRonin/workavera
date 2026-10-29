@@ -9,6 +9,7 @@ import {
   RESOURCES_COLLECTION,
   resourceErrorMessage,
   uploadResource,
+  useResourceMaxSize,
   validateResourceFile,
   type Resource,
 } from "@/lib/resources"
@@ -43,6 +44,7 @@ function readyAttachment(resource: Resource): InputAttachment {
  */
 export function useResourceAttachments() {
   const [attachments, setAttachments] = useState<InputAttachment[]>([])
+  const maxSize = useResourceMaxSize()
 
   const full = attachments.length >= MAX_MESSAGE_RESOURCES
   const uploading = attachments.some((item) => item.status === "uploading")
@@ -88,7 +90,7 @@ export function useResourceAttachments() {
         )
         return
       }
-      const invalid = validateResourceFile(file)
+      const invalid = validateResourceFile(file, maxSize)
       if (invalid) {
         toast.error(`${file.name}: ${invalid}`)
         return
@@ -107,7 +109,7 @@ export function useResourceAttachments() {
       ])
       void runUpload(key, file)
     },
-    [full, runUpload]
+    [full, maxSize, runUpload]
   )
 
   const addResource = useCallback((resource: Resource) => {

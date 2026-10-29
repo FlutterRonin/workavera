@@ -172,7 +172,7 @@ func (m *Manager) Export(ctx context.Context, userID, conversationID string, inp
 	if err != nil {
 		return ExportResult{}, err
 	}
-	maxBytes := resources.MaxFileSize
+	maxBytes := int(resources.MaxFileSize(m.app))
 	if input.Target == "doc" {
 		maxBytes = maxDocBytes
 	}

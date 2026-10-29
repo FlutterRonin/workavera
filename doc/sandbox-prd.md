@@ -54,7 +54,7 @@ The first version supports Docker only, and only when Workavera itself runs dire
 8. The server never mounts a host directory into a container, never exposes the Docker socket to a container, and never uses `--privileged`.
 9. No Workavera credential, model API key, MCP credential, or other user data is injected into the container. User data enters only when the user's assistant places it there explicitly with `sandbox_import`.
 10. File content in the sandbox, command output, and imported resources and documents are untrusted data, never system instructions or tool authorization.
-11. Exporting to Resources follows the resource upload rules exactly (6 MiB, real media type detection, the allow-list, conversion). Exporting to Docs follows the document permission and validation rules. The sandbox is not a way around those rules.
+11. Exporting to Resources follows the resource upload rules exactly (the configured size limit, real media type detection, the allow-list, conversion). Exporting to Docs follows the document permission and validation rules. The sandbox is not a way around those rules.
 12. Docker is the source of truth for container state, read through `docker inspect` every time, with no copy in the database. Only "preparing", the reason for the latest failed preparation, and the latest activity time are kept, in process memory.
 
 ## 5. Prerequisite change: binary resources
@@ -69,10 +69,10 @@ The sandbox's most common outputs are chart images, archives, and PDFs without a
 Rules:
 
 1. A binary resource goes through no converter; `converted_markdown` is the empty string and `converted_size` is 0. Whether a resource is binary follows from its server-detected `media_type`; no field is added.
-2. The 6 MiB limit, real media type detection, SHA-256 deduplication, owner isolation, and download link rules all stay as they are.
+2. The size limit (`resources.max_file_size_mb` in `configs`, 10 MB by default), real media type detection, SHA-256 deduplication, owner isolation, and download link rules all stay as they are.
 3. SVG is out of scope for the first version: it is XML that can run scripts, and opening it directly in a browser as a protected file risks XSS.
 4. A ZIP is stored and downloaded as a whole; it is not extracted and its entries are not read. OOXML and EPUB files carry the ZIP signature too, so detection matches those specific formats first and classifies a file as a plain ZIP only last.
-5. Image-only PDFs are still rejected with `document_needs_ocr`. A PDF is meant to be a readable document, and storing a PDF of page images as an unreadable resource would mislead the user. To deliver a chart, export the image itself.
+5. PDFs with scanned pages, encrypted documents, and documents without text are kept as resources without text, with the reason in `no_text_reason`, so a user's scans can reach the sandbox to be OCRed. The Resources page marks them "No text" so they do not pass for readable documents. To deliver a chart, export the image itself. The "Resources without text" section of the Resources PRD has the current rules, including the binary formats added since: TIFF, BMP, HEIC, TAR, GZIP, and 7z.
 6. `resources_list` matches binary resources by name only. `resources_search` and `resources_read_markdown` return `resource_has_no_text` for them, saying the resource can only be downloaded or placed in the sandbox with `sandbox_import`.
 7. When a binary resource is attached in Chat, the metadata block the model sees says the file has no text representation, so the assistant does not try to read it.
 8. The Resources page hides "View extracted text" for binary resources; everything else (rename, download, delete, attach to Chat) is unchanged.
@@ -116,7 +116,7 @@ Instance settings live in the existing `configs` collection, like `system.timezo
 | key | Default | Description |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | The instance's master switch. When off, no user can use the sandbox |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | The image used when a container is created or rebuilt; can point at a registry mirror or a self-hosted registry |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:3"` | The image used when a container is created or rebuilt; can point at a registry mirror or a self-hosted registry |
 | `sandbox.network` | `true` | The network master switch. When off, every sandbox is offline and users' network switches are disabled |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | The resource limits of each sandbox |
 | `sandbox.idle_timeout_minutes` | `60` | Minutes without activity before a container stops automatically; `0` never stops it |
@@ -154,13 +154,17 @@ That repository's README lists what Workavera relies on in the image (the user a
 | --- | --- |
 | Base | Ubuntu 26.04 LTS, `LANG=C.UTF-8`, `TZ=Etc/UTC` |
 | Node.js | Node.js 24 LTS, npm, and pnpm |
-| Python | Python 3 in a virtual environment at `/opt/venv`, with uv, NumPy, pandas, matplotlib, and openpyxl |
+| Python | Python 3 in a virtual environment at `/opt/venv`, with uv, NumPy, pandas, DuckDB, matplotlib, openpyxl, python-docx, python-pptx, and pypdf |
+| Documents | pandoc (Markdown, HTML, docx, and epub conversion), Typst (PDF typesetting), Poppler (`pdftotext`, `pdftoppm`, `pdfimages`), and qpdf |
+| OCR | Tesseract with Simplified Chinese, Traditional Chinese, and English, and OCRmyPDF to add a text layer to scanned PDFs |
+| Data and diagrams | The DuckDB CLI for SQL over CSV, Parquet, and JSON, and Graphviz (`dot`) |
 | Command-line tools | `git`, `curl`, `ca-certificates`, `jq`, `ripgrep`, `unzip`, `zip`, `xz-utils`, `zstd`, `file`, `procps`, `sudo` |
 | Fonts | `fonts-noto-cjk` and `fontconfig`; matplotlib defaults to Noto Sans CJK SC |
 
 - Go is not included. The assistant can install it with `sudo` when needed.
 - Ubuntu's system Python refuses a plain `pip install` (PEP 668). `/opt/venv` belongs to the sandbox user and comes first on `PATH`, so `python`, `pip`, and `uv pip` install into it without `sudo`.
-- NumPy, pandas, matplotlib, and openpyxl are preinstalled because a sandbox may be offline, where nothing can be installed.
+- The data, document, and OCR tools are preinstalled because a sandbox may be offline, where nothing can be installed. Version 3 added the document, OCR, and data rows above; Typst and DuckDB come from their release archives, pinned by SHA-256.
+- LibreOffice, a browser, and ffmpeg are left out to keep the image small; the assistant installs them with `sudo` when a task needs them, and records that in the environment notes. anydoc is not included either (see section 3).
 - pnpm is installed outright rather than left to corepack, which would download it on first use and fail in an offline sandbox.
 - CJK fonts are required: without them, Chinese text in charts and PDFs made with matplotlib and similar tools renders as boxes. The image makes Noto Sans CJK SC matplotlib's default font, so the assistant does not have to choose one.
 
@@ -180,7 +184,7 @@ The image declares its installed tools and fonts in the label `org.workavera.san
 - The label travels with the image to a registry mirror, and an image an administrator builds can set the same label to describe its own environment.
 - Without the label, the system prompt says the image declares no tools and that a tool should be checked with a command before relying on it.
 - The sandbox repository's smoke test checks that the label exists and names the main tools actually installed, so the two cannot drift apart.
-- Version 1 was published before the label existed, so the `sandbox.image` default starts at version 2.
+- Version 1 was published before the label existed, so the `sandbox.image` default started at version 2. Version 3 adds the document, OCR, and data tools, and a migration moves the default to it.
 
 ### Versions and publishing
 
@@ -334,14 +338,14 @@ A `GET` response looks like:
   "enabled": true,
   "online": true,
   "networkAllowed": true,
-  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:2",
+  "configuredImage": "ghcr.io/xusenlin/workavera-sandbox:3",
   "limits": { "memory": "1g", "cpus": 2, "pids": 512 },
   "idleTimeoutMinutes": 60,
   "container": {
     "name": "workavera-abc123def456ghi",
     "state": "running",
     "phase": "",
-    "image": "ghcr.io/xusenlin/workavera-sandbox:2",
+    "image": "ghcr.io/xusenlin/workavera-sandbox:3",
     "createdAt": "2026-10-28T08:00:00Z",
     "error": ""
   }
@@ -406,7 +410,7 @@ Copies one of the user's resources or documents into the sandbox on the server, 
 Saves a file from the sandbox to the resource library or to Docs.
 
 - Input: required `path` and `target` (`resource` or `doc`). Optional `name`, the display name of a resource or the title of a document, defaulting to the file name. When exporting to Docs, optional `folderId` or `projectId`, as in `docs_upsert`.
-- To a resource: `stat` first confirms the file is at most 6 MiB, then its bytes go through the same service as an upload, with type detection, the allow-list, conversion, and deduplication, including the binary resources of section 5. Returns a resource summary with one note: the user downloads this original file; the converted Markdown is for search and reading only and may be lossy; to check the export, inspect the original in the sandbox rather than with `resources_read_markdown`.
+- To a resource: `stat` first confirms the file is within the configured size limit, then its bytes go through the same service as an upload, with type detection, the allow-list, conversion, and deduplication, including the resources without text of section 5. Returns a resource summary with one note: the user downloads this original file; the converted Markdown is for search and reading only and may be lossy; to check the export, inspect the original in the sandbox rather than with `resources_read_markdown`.
 - To a document: only `.md`, `.markdown`, `.html`, and `.htm` are accepted, the extension decides the document kind, and the content must be valid UTF-8. The first version only creates documents and never overwrites one, so that the document revision check cannot be bypassed. Existing documents are still changed with `docs_replace` or `docs_upsert`.
 
 ### System prompt
@@ -463,7 +467,7 @@ No sandbox tool asks for approval per call. Commands can affect only the user's 
 | `export_type_unsupported` | The extension is not supported for a document, or the type is not on the resource allow-list | Tell the user which types are supported |
 | `resource_has_no_text` | Searching or reading a binary resource | Explain that the resource can only be downloaded, or imported into the sandbox |
 
-When exporting to a resource, the resource library's own errors (such as `document_needs_ocr` and `converted_content_empty`) are returned unchanged.
+When exporting to a resource, the resource library's own errors (such as `file_too_large` and `document_malformed`) are returned unchanged.
 
 ## 14. Implementation layout
 
@@ -501,7 +505,7 @@ When exporting to a resource, the resource library's own errors (such as `docume
 20. No sandbox tool or endpoint accepts a container name or user ID, so neither the model nor a client can point at another user's sandbox: every action uses only the name derived from the authenticated user.
 21. Changing `sandbox_enabled` or `sandbox_offline` through the PocketBase Records API is rejected.
 22. No `sandbox_` tool appears in the MCP Server's tool list or under any API key.
-23. Uploading PNG, JPEG, GIF, WebP, and ZIP resources succeeds and `resources_read_markdown` returns `resource_has_no_text` for them; uploading SVG is rejected; image-only PDFs are still rejected with `document_needs_ocr`.
+23. Uploading PNG, JPEG, GIF, WebP, TIFF, BMP, HEIC, ZIP, TAR, GZIP, and 7z resources succeeds and `resources_read_markdown` returns `resource_has_no_text` for them; uploading SVG is rejected; a scanned PDF is kept without text, can be imported into the sandbox, OCRed with OCRmyPDF, and exported as a searchable PDF that has text.
 24. With the default image, the system prompt includes the text of its `org.workavera.sandbox.tools` label, and a stopped container is not started to read it; after `sandbox.image` is changed to an image without the label and the container is rebuilt, the system prompt asks for tools to be checked with a command first.
 
 ## 16. Settled product choices

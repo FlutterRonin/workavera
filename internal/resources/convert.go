@@ -78,7 +78,7 @@ func (c *converter) anydocOptions() []anydoc.Option {
 		anydoc.WithCompilationCache(c.cacheDir),
 		anydoc.WithConcurrency(1),
 		anydoc.WithMemoryLimitPages(guestMemoryPages),
-		anydoc.WithMaxInputBytes(MaxFileSize),
+		anydoc.WithMaxInputBytes(MaxFileSizeCeiling),
 	}
 }
 

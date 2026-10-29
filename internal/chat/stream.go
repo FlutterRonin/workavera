@@ -32,7 +32,7 @@ Modules and navigation:
 - Chat (/chat): AI workspace entry point.
 - Board (/board): manage projects and tasks.
 - Docs (/docs): create, organize, and publish knowledge, including interactive HTML documents (self-contained tools and prototypes).
-- Resources (/resources): the user's uploaded files: PDF, Office, text, and HTML files are readable through their converted Markdown; images and ZIP archives have no text and can only be downloaded.
+- Resources (/resources): the user's uploaded files. Documents (PDF, Office, HTML) and text, code, and data files are readable through their converted Markdown; images, archives, and documents whose text could not be extracted, such as scanned PDFs, have none and can only be downloaded or processed in the sandbox.
 - Calendar (/calendar): manage events and time commitments.
 - Settings (/settings): manage preferences, models, and API keys.
 

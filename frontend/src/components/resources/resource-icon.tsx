@@ -14,7 +14,15 @@ import { cn } from "@/lib/utils"
 function iconFor(mediaType: string) {
   if (mediaType === "application/pdf") return Pdf01Icon
   if (mediaType.startsWith("image/")) return Image01Icon
-  if (mediaType === "application/zip") return FileZipIcon
+  if (
+    mediaType === "application/zip" ||
+    mediaType === "application/x-tar" ||
+    mediaType === "application/gzip" ||
+    mediaType === "application/x-7z-compressed"
+  )
+    return FileZipIcon
+  if (mediaType.startsWith("text/x-") || mediaType === "text/javascript")
+    return SourceCodeIcon
   if (mediaType === "text/html" || mediaType.includes("json"))
     return SourceCodeIcon
   if (mediaType.startsWith("text/")) return File02Icon

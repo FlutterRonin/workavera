@@ -39,6 +39,7 @@ import {
   formatBytes,
   formatLabel,
   getResourceState,
+  isPreviewableImage,
   openResourceFile,
   RESOURCES_COLLECTION,
   resourceErrorMessage,
@@ -193,7 +194,7 @@ function FileTile({
 }
 
 function SentResourceCard({ file }: { file: SentResource }) {
-  const isImage = file.mediaType.startsWith("image/")
+  const isImage = isPreviewableImage(file.mediaType)
   const [resource, setResource] = useState<Resource | null | undefined>()
   const [thumbUrl, setThumbUrl] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)

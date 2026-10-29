@@ -218,8 +218,13 @@ func ResourceAttachmentText(part Part) string {
 	}
 	singleLine := strings.NewReplacer("\r", " ", "\n", " ").Replace
 	usage := "The file's content is NOT included above. To use it, call the Resources tools with this resourceId. "
-	if binary, _ := data["binary"].(bool); binary {
-		usage = "This file has no text representation, so the Resources tools cannot read or search it. It can be downloaded, or copied into the sandbox with sandbox_import when the sandbox tools are available. "
+	noText, _ := data["noText"].(string)
+	if binary, _ := data["binary"].(bool); binary && noText == "" {
+		// Messages saved before the reason was recorded.
+		noText = "This file has no text representation."
+	}
+	if noText != "" {
+		usage = singleLine(noText) + " The Resources tools cannot read or search it. It can be downloaded, or copied into the sandbox with sandbox_import when the sandbox tools are available. "
 	}
 	return "[The user attached a file to this message]\n" +
 		"resourceId: " + singleLine(resourceID) + "\n" +

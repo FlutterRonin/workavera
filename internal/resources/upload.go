@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path"
@@ -14,6 +16,7 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
+	anydoc "github.com/xusenlin/go-anydoc"
 )
 
 // conversionPath is how an accepted format becomes Markdown.
@@ -88,16 +91,84 @@ var formats = map[string]format{
 	// names first; those are still ZIP archives and pass as one through the
 	// detected type's ancestors.
 	"zip": {mediaType: "application/zip", detected: []string{"application/zip"}, path: pathBinary},
+	// TIFF is what most scanners write, and HEIC what iPhones photograph in;
+	// both can be OCRed in the sandbox.
+	"tif":  {mediaType: "image/tiff", detected: []string{"image/tiff"}, path: pathBinary},
+	"tiff": {mediaType: "image/tiff", detected: []string{"image/tiff"}, path: pathBinary},
+	"bmp":  {mediaType: "image/bmp", detected: []string{"image/bmp"}, path: pathBinary},
+	"heic": {mediaType: "image/heic", detected: []string{"image/heic", "image/heic-sequence", "image/heif"}, path: pathBinary},
+	"tar":  {mediaType: "application/x-tar", detected: []string{"application/x-tar"}, path: pathBinary},
+	"gz":   {mediaType: "application/gzip", detected: []string{"application/gzip"}, path: pathBinary},
+	"tgz":  {mediaType: "application/gzip", detected: []string{"application/gzip"}, path: pathBinary},
+	"7z":   {mediaType: "application/x-7z-compressed", detected: []string{"application/x-7z-compressed"}, path: pathBinary},
+}
+
+// textFormats are code, configuration, and data files kept as text: their
+// Markdown is the file itself, like .txt. Each maps to the media type stored
+// for it.
+var textFormats = map[string]string{
+	"tsv": "text/tab-separated-values", "log": "text/plain", "ipynb": "application/x-ipynb+json",
+	"xml": "application/xml", "yaml": "application/yaml", "yml": "application/yaml", "toml": "application/toml",
+	"ini": "text/plain", "cfg": "text/plain", "conf": "text/plain", "env": "text/plain",
+	"sql": "application/sql", "sh": "application/x-sh", "bash": "application/x-sh", "zsh": "application/x-sh",
+	"py": "text/x-python", "js": "text/javascript", "mjs": "text/javascript", "cjs": "text/javascript",
+	"ts": "text/x-typescript", "tsx": "text/x-typescript", "jsx": "text/javascript",
+	"go": "text/x-go", "rs": "text/x-rust", "java": "text/x-java", "kt": "text/x-kotlin", "swift": "text/x-swift",
+	"c": "text/x-c", "h": "text/x-c", "cpp": "text/x-c++", "cc": "text/x-c++", "hpp": "text/x-c++",
+	"cs": "text/x-csharp", "rb": "text/x-ruby", "php": "text/x-php", "lua": "text/x-lua", "r": "text/x-r",
+	"css": "text/css", "scss": "text/x-scss", "vue": "text/x-vue", "svelte": "text/x-svelte",
+}
+
+func init() {
+	for ext, mediaType := range textFormats {
+		formats[ext] = format{mediaType: mediaType, detected: []string{mimeText}, path: pathText}
+	}
 }
 
 // IsBinary reports whether resources of the stored media type are binary:
 // they have no Markdown and can only be downloaded or copied.
 func IsBinary(mediaType string) bool {
-	switch mediaType {
-	case "image/png", "image/jpeg", "image/gif", "image/webp", "application/zip":
-		return true
+	for _, spec := range formats {
+		if spec.mediaType == mediaType {
+			return spec.path == pathBinary
+		}
 	}
 	return false
+}
+
+// Reasons a resource is stored without Markdown. A file whose text cannot be
+// extracted is still kept, so it can be downloaded or processed in the
+// sandbox, for example to OCR a scanned PDF.
+const (
+	NoTextBinary    = "binary"
+	NoTextNeedsOCR  = "needs_ocr"
+	NoTextEncrypted = "encrypted"
+	NoTextEmpty     = "empty"
+	NoTextTooLarge  = "too_complex"
+)
+
+// noTextReason maps a conversion failure to the reason a file is kept
+// without text, or "" when the upload must fail: a damaged file, which may
+// be a broken upload, or a transient failure worth retrying.
+func noTextReason(err error) string {
+	var resourceErr *Error
+	if !errors.As(err, &resourceErr) {
+		return ""
+	}
+	if errors.Is(err, anydoc.ErrResourceLimit) {
+		return NoTextTooLarge
+	}
+	switch resourceErr.Code {
+	case CodeDocumentNeedsOCR:
+		return NoTextNeedsOCR
+	case CodeDocumentEncrypted:
+		return NoTextEncrypted
+	case CodeConvertedContentEmpty:
+		return NoTextEmpty
+	case CodeConvertedContentTooLarge:
+		return NoTextTooLarge
+	}
+	return ""
 }
 
 // readUploadedFile returns the single multipart "file" of the request and its
@@ -112,7 +183,7 @@ func readUploadedFile(event *core.RequestEvent) (string, []byte, error) {
 		return "", nil, newError(CodeInvalidInput, http.StatusBadRequest, "Upload one file at a time.")
 	}
 	file := files[0]
-	if err := checkSize(file.Size); err != nil {
+	if err := checkSize(event.App, file.Size); err != nil {
 		return "", nil, err
 	}
 	reader, err := file.Reader.Open()
@@ -120,28 +191,29 @@ func readUploadedFile(event *core.RequestEvent) (string, []byte, error) {
 		return "", nil, err
 	}
 	defer reader.Close()
-	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSize+1))
+	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSize(event.App)+1))
 	if err != nil {
 		return "", nil, err
 	}
 	return file.OriginalName, data, nil
 }
 
-func checkSize(size int64) error {
+func checkSize(app core.App, size int64) error {
 	if size <= 0 {
 		return newError(CodeFileEmpty, http.StatusBadRequest, "The file is empty.")
 	}
-	if size > MaxFileSize {
-		return newError(CodeFileTooLarge, http.StatusRequestEntityTooLarge, "Files must be 6 MB or smaller.")
+	if limit := MaxFileSize(app); size > limit {
+		return newError(CodeFileTooLarge, http.StatusRequestEntityTooLarge, fmt.Sprintf("Files must be %d MB or smaller.", limit/(1024*1024)))
 	}
 	return nil
 }
 
 // Upload stores a new resource for the owner, converting it to Markdown in
-// the same request. Nothing is written unless conversion succeeds, so a failed
-// upload leaves neither a record nor a file behind. Uploading the same content
-// under the same original name returns the existing resource. Binary formats
-// are stored without Markdown.
+// the same request. A damaged file or a failed conversion leaves neither a
+// record nor a file behind; binary formats and documents whose text cannot be
+// extracted, such as scanned PDFs, are stored without Markdown and with the
+// reason. Uploading the same content under the same original name returns
+// the existing resource.
 func Upload(ctx context.Context, app core.App, conv *converter, ownerID, name string, data []byte) (Resource, error) {
 	return upload(ctx, app, conv, ownerID, name, "", data)
 }
@@ -159,7 +231,7 @@ func Save(ctx context.Context, app core.App, ownerID, name, displayName string, 
 }
 
 func upload(ctx context.Context, app core.App, conv *converter, ownerID, name, displayName string, data []byte) (Resource, error) {
-	if err := checkSize(int64(len(data))); err != nil {
+	if err := checkSize(app, int64(len(data))); err != nil {
 		return Resource{}, err
 	}
 	originalName := sanitizeName(name)
@@ -187,9 +259,16 @@ func upload(ctx context.Context, app core.App, conv *converter, ownerID, name, d
 		return resourceFromRecord(existing), nil
 	}
 
+	reason := ""
 	markdown, err := conv.toMarkdown(ctx, spec.path, ext, data)
-	if err != nil {
-		return Resource{}, err
+	switch {
+	case spec.path == pathBinary:
+		reason = NoTextBinary
+	case err != nil:
+		if reason = noTextReason(err); reason == "" {
+			return Resource{}, err
+		}
+		markdown = ""
 	}
 
 	collection, err := app.FindCollectionByNameOrId(CollectionName)
@@ -210,6 +289,7 @@ func upload(ctx context.Context, app core.App, conv *converter, ownerID, name, d
 	record.Set("sha256", contentHash)
 	record.Set("converted_markdown", markdown)
 	record.Set("converted_size", len(markdown))
+	record.Set("no_text_reason", reason)
 	if err := app.Save(record); err != nil {
 		// A concurrent upload of the same file may have won the unique index
 		// between the lookup above and this save; reuse its record.

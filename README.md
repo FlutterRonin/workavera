@@ -144,7 +144,7 @@ By default it listens on <http://127.0.0.1:8090>. Pass `--http=0.0.0.0:8090` to 
 
 The demo user is seeded only when the `users` collection is empty, so upgrades do not add or overwrite an account in an existing workspace.
 
-Instance-wide settings live in the `configs` collection, which only superusers can edit in the PocketBase dashboard. Besides the [sandbox](#sandbox) keys, `chat.max_steps` (default `80`, from 2 to 500) caps the model calls of one Chat response; the last one cannot call tools, so a response that reaches the cap still ends with a summary.
+Instance-wide settings live in the `configs` collection, which only superusers can edit in the PocketBase dashboard. Besides the [sandbox](#sandbox) keys, `chat.max_steps` (default `80`, from 2 to 500) caps the model calls of one Chat response; the last one cannot call tools, so a response that reaches the cap still ends with a summary. `resources.max_file_size_mb` (default `10`, from 1 to 100) is the largest file accepted in Resources, for uploads and sandbox exports alike.
 
 ### Memory for file conversion
 
@@ -164,7 +164,7 @@ The image `ghcr.io/xusenlin/workavera-sandbox` (from [xusenlin/workavera-sandbox
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | Master switch; `false` stops every sandbox container |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | Image for new and rebuilt containers, e.g. a mirror |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:3"` | Image for new and rebuilt containers, e.g. a mirror |
 | `sandbox.network` | `true` | Network master switch; `false` takes every sandbox offline |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | Per-container limits, applied to existing containers at once |
 | `sandbox.idle_timeout_minutes` | `60` | Stop a container after this long without use; `0` never stops it |
@@ -180,7 +180,7 @@ One line each; the [product documentation](#product-documentation) below carries
 - **Calendar** combines personal events and visible Board deadlines in one view, with recurrence and in-app reminders.
 - **Chat** is where you work with the model: durable streaming conversations that survive browser disconnects, with visible reasoning and tool calls, automatic compaction of long conversations, and optional long-term memory that is off by default.
 - **Reading** saves external links and notes with projects, tags, read state, and AI summaries.
-- **Resources** keeps the files you upload (PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, JSON, images, and ZIP archives) and the extracted text of documents, so Chat can attach them with `+` or `#` and the assistant can search and read them.
+- **Resources** keeps the files you upload, 10 MB each by default: documents (PDF, Office, OpenDocument, RTF, EPUB, HTML), text, code, and data files, images, and archives. Text is extracted from documents so Chat can attach them with `+` or `#` and the assistant can search and read them; scanned or encrypted documents are kept without text and can be OCRed in the sandbox.
 - **Sandbox** gives each user an optional Linux container in which the assistant runs commands and scripts and exchanges files with Resources and Docs; see [Sandbox](#sandbox) for its requirements.
 - **Contacts** provides a searchable team contact list with personal favorites.
 - **Dashboard, Notifications, and Settings** cover the workspace overview, the in-app notification inbox, model configuration and sharing, appearance, and profile.

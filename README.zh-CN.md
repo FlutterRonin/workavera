@@ -141,7 +141,7 @@ docker run -p 8090:8090 -v workavera-data:/app/pb_data ghcr.io/xusenlin/workaver
 
 只有当 `users` 集合为空时才会初始化 demo 用户，因此升级已有工作区不会新增账号，也不会覆盖现有账号。
 
-实例级设置保存在 `configs` 集合中，只有超级管理员能在 PocketBase 后台修改。除了[沙箱](#沙箱sandbox)相关的 key，`chat.max_steps`（默认 `80`，取值 2 到 500）限制一次 Chat 回复最多调用模型的次数；最后一次不能调用工具，因此达到上限的回复也会以总结结束。
+实例级设置保存在 `configs` 集合中，只有超级管理员能在 PocketBase 后台修改。除了[沙箱](#沙箱sandbox)相关的 key，`chat.max_steps`（默认 `80`，取值 2 到 500）限制一次 Chat 回复最多调用模型的次数；最后一次不能调用工具，因此达到上限的回复也会以总结结束。`resources.max_file_size_mb`（默认 `10`，取值 1 到 100）是 Resources 接受的最大文件大小，上传和沙箱导出都受它限制。
 
 ### 文件转换的内存需求
 
@@ -161,7 +161,7 @@ Resources 用内嵌的 WebAssembly 模块转换上传的文档，该模块会被
 | key | 默认值 | 说明 |
 | --- | --- | --- |
 | `sandbox.enabled` | `true` | 总开关；设为 `false` 会停止所有沙箱容器 |
-| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:2"` | 新建和重建容器使用的镜像，例如镜像加速地址 |
+| `sandbox.image` | `"ghcr.io/xusenlin/workavera-sandbox:3"` | 新建和重建容器使用的镜像，例如镜像加速地址 |
 | `sandbox.network` | `true` | 网络总开关；设为 `false` 会让所有沙箱离线 |
 | `sandbox.limits` | `{"memory": "1g", "cpus": 2, "pids": 512}` | 每个容器的资源上限，立即作用于已有容器 |
 | `sandbox.idle_timeout_minutes` | `60` | 空闲多少分钟后停止容器；`0` 表示不自动停止 |
@@ -177,7 +177,7 @@ Resources 用内嵌的 WebAssembly 模块转换上传的文档，该模块会被
 - **Calendar** 在同一视图中合并个人事件与可见的 Board 截止事项，支持重复日程和站内提醒。
 - **Chat** 是你和模型协作的地方：持久化的流式会话，浏览器断开后运行继续，展示推理与工具调用，长会话自动压缩，并提供默认关闭的长期记忆。
 - **Reading** 保存外部链接和笔记，支持关联项目、标签、阅读状态和 AI 总结。
-- **Resources** 保存你上传的文件（PDF、Office、OpenDocument、RTF、EPUB、CSV、HTML、文本、JSON、图片和 ZIP 压缩包）以及文档提取出的文本，Chat 可以用 `+` 或 `#` 附加它们，助手可以搜索和阅读其内容。
+- **Resources** 保存你上传的文件，默认每个最大 10 MB：文档（PDF、Office、OpenDocument、RTF、EPUB、HTML）、文本、代码和数据文件、图片以及压缩包。文档会提取文字，Chat 可以用 `+` 或 `#` 附加它们，助手可以搜索和阅读其内容；扫描版或加密的文档不提取文字也会保存，可以在沙箱中做 OCR。
 - **Sandbox** 为每位用户提供可选的 Linux 容器，助手可以在其中运行命令和脚本，并与 Resources、Docs 交换文件；前提条件见 [沙箱（Sandbox）](#沙箱sandbox)。
 - **Contacts** 提供可搜索的团队联系人列表和个人收藏。
 - **Dashboard、Notifications 与 Settings** 分别负责工作概览、站内通知收件箱，以及模型配置与分享、外观和个人资料。

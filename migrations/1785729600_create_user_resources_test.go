@@ -29,7 +29,7 @@ func TestUserResourcesMigration(t *testing.T) {
 		t.Fatal("resources must be created and deleted through the resource service only")
 	}
 	file, ok := resources.Fields.GetByName("file").(*core.FileField)
-	if !ok || !file.Protected || !file.Required || file.MaxSelect != 1 || file.MaxSize != userResourceMaxFileSize {
+	if !ok || !file.Protected || !file.Required || file.MaxSelect != 1 || file.MaxSize != resourceFileSizeCeiling {
 		t.Fatalf("unexpected file field: %#v", file)
 	}
 	hash, ok := resources.Fields.GetByName("sha256").(*core.TextField)

@@ -16,7 +16,7 @@ A resource's lifecycle is independent of Chat. A message only stores the resourc
 
 - Give every user a private collection of general resources that can be reused across modules.
 - Store the real source file, a protected source file URL, the original name, a display name, the server-detected media type, the size, and a content hash.
-- Strictly reject empty files and source files larger than 6 MiB.
+- Strictly reject empty files and source files larger than the configured limit, `resources.max_file_size_mb` in `configs`: 10 MB by default, at most 100 MB.
 - Convert supported office documents, PDFs, and similar source files to Markdown synchronously inside the upload request with `xusenlin/go-anydoc`, convert HTML with `html-to-markdown`, and store plain text formats as they are.
 - Let users list, search, upload, rename, download, and delete their own resources.
 - Let users upload a file directly from the chat input, or reference an existing resource with a trigger character.
@@ -48,7 +48,7 @@ A resource's lifecycle is independent of Chat. A message only stores the resourc
 ## 4. Core rules
 
 1. `user_resources.file` holds the authoritative source file; `converted_markdown` is a regenerable representation for AI reading.
-2. A source file must be larger than 0 bytes and at most `6 * 1024 * 1024` bytes, that is 6,291,456 bytes.
+2. A source file must be larger than 0 bytes and at most the configured limit. Superusers set it in megabytes, from 1 to 100, through the `resources.max_file_size_mb` record of `configs`; a missing record means 10 MB. The limit applies to uploads and to files exported from the sandbox, and a change applies to the next upload. The request body, the file field, and the converter's input limit are sized for the 100 MB ceiling.
 3. The file extension and the browser-submitted MIME type are only hints; the server must detect the real media type and validate it against an allow list.
 4. A resource always belongs to one user. Only the owner can view, manage, and reference it, and create download credentials for it.
 5. The protected source file URL requires Workavera user authentication and cannot serve as an external public download URL.
@@ -73,6 +73,8 @@ The first version handles uploads along three paths, all completed synchronously
 | --- | --- | --- |
 | Text | `.txt`, `.md` | `text/plain`, `text/markdown` |
 | JSON | `.json`, `.jsonl` | `application/json`, `application/x-ndjson` |
+| Data and configuration | `.tsv`, `.log`, `.ipynb`, `.xml`, `.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.env`, `.sql` | `text/tab-separated-values`, `application/x-ipynb+json`, `application/xml`, `application/yaml`, and so on |
+| Code | `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.go`, `.rs`, `.java`, `.kt`, `.swift`, `.c`, `.h`, `.cpp`, `.cc`, `.hpp`, `.cs`, `.rb`, `.php`, `.lua`, `.r`, `.css`, `.scss`, `.vue`, `.svelte`, `.sh`, `.bash`, `.zsh` | `text/x-python`, `text/javascript`, `text/x-go`, and so on |
 
 These formats already are text. The server checks that they are valid UTF-8 and writes them unchanged into `converted_markdown`, without calling any parser. Non-UTF-8 content is rejected with `unsupported_encoding`.
 
@@ -95,7 +97,7 @@ Conversion calls `Convert(ctx, bytes, ext)`, where `ext` is the bare extension n
 
 The conversion result is at most 8 MiB of UTF-8 bytes; anything larger is rejected with `converted_content_too_large`. A conversion that succeeds with an empty body is rejected with `converted_content_empty`, and placeholder text never counts as a valid body.
 
-The converter rejects any PDF that contains image-only pages (`ErrNeedsOCR`). This is returned as `document_needs_ocr`, with the pages that need OCR named in the error description, for example "pages 28–37 need OCR". A PDF where only some pages are scans is rejected as a whole as well. Markdown with missing pages is never accepted, because the Assistant would otherwise answer from incomplete content without knowing it.
+The converter refuses any PDF that contains image-only pages (`ErrNeedsOCR`). Markdown with missing pages is never kept, because the Assistant would otherwise answer from incomplete content without knowing it, so such a PDF, even one where only some pages are scans, is stored as a resource without text (`no_text_reason = needs_ocr`; see "Resources without text" below). The user can still download it, and OCR in the [sandbox](./sandbox-prd.md) can add a text layer and export a searchable copy.
 
 Known limitation: go-anydoc (verified on v0.3.1) decodes CSV files in non-UTF-8 encodings (GBK, Big5, Shift_JIS) as mojibake, and upstream `firecrawl/anydoc` has not addressed it. The first version works around it on the server by detecting the encoding of CSV bytes and converting them to UTF-8 before handing them to the converter.
 
@@ -117,30 +119,42 @@ Constraints:
 
 - Only the uploaded bytes are converted. External stylesheets, images, frames, and link targets are never fetched, so there is no SSRF. Relative links are kept as they are and are not resolved to absolute URLs;
 - No main-content extraction (unlike Reading, which keeps only the article body): navigation, footers, and the rest of the page are kept. It is the user's own file, and converting it as it is matches the principle that the source file is the authoritative content;
-- Conversion runs in the main process, without a wasm sandbox, and cannot be interrupted mid-way through a context the way a wasm guest can (the library accepts a context but never checks for cancellation). It is bounded by its input: with the 6 MiB limit and linear-time HTML parsing, the time and memory of one conversion grow linearly with the input. HTML conversion also holds the conversion semaphore, so it cannot stack with go-anydoc conversions beyond the memory budget;
+- Conversion runs in the main process, without a wasm sandbox, and cannot be interrupted mid-way through a context the way a wasm guest can (the library accepts a context but never checks for cancellation). It is bounded by its input: with the size limit and linear-time HTML parsing, the time and memory of one conversion grow linearly with the input. HTML conversion also holds the conversion semaphore, so it cannot stack with go-anydoc conversions beyond the memory budget;
 - Bundle formats such as `.mhtml` and `.webarchive` are not part of this path and remain unsupported.
 
-### Binary resources
+### Resources without text
 
-Images and ZIP archives, most often produced in the [sandbox](./sandbox-prd.md), are stored as binary resources. The rules are the same for user uploads and sandbox exports.
+Some resources are kept without Markdown. The rules are the same for user uploads and sandbox exports, and `no_text_reason` records why:
+
+| `no_text_reason` | When |
+| --- | --- |
+| `binary` | A binary format, listed below. No converter runs |
+| `needs_ocr` | A PDF with scanned, image-only pages |
+| `encrypted` | A password-protected document |
+| `empty` | A document that parses but holds no text, such as slides of pictures |
+| `too_complex` | A document past the converter's memory limit, or whose Markdown would exceed 8 MiB |
+
+A damaged file (`document_malformed`), a timeout, and any other conversion failure still fail the upload: the first may be a broken upload, the others are worth retrying.
+
+Binary formats, most often produced in the sandbox:
 
 | Kind | Extensions | Media type |
 | --- | --- | --- |
-| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
-| Archive | `.zip` | `application/zip` |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.tif`, `.tiff`, `.bmp`, `.heic` | `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/tiff`, `image/bmp`, `image/heic` |
+| Archives | `.zip`, `.tar`, `.gz`, `.tgz`, `.7z` | `application/zip`, `application/x-tar`, `application/gzip`, `application/x-7z-compressed` |
 
-- No converter runs: `converted_markdown` is an empty string and `converted_size` is 0. Whether a resource is binary follows from its server-detected `media_type`; there is no separate field.
-- The 6 MiB limit, real media type detection, SHA-256 deduplication, owner isolation, and download lease rules all apply unchanged.
+- `converted_markdown` is an empty string and `converted_size` is 0.
+- The size limit, real media type detection, SHA-256 deduplication, owner isolation, and download lease rules all apply unchanged.
+- Only PNG, JPEG, GIF, and WebP get a thumbnail and an inline preview; TIFF, BMP, and HEIC, which browsers do not all show, are downloaded.
 - SVG is not supported: it is XML that can run scripts, which is an XSS risk when the protected file is opened in the browser.
 - ZIP archives are stored and downloaded as a whole, never unpacked or read. The ZIP signature also opens OOXML and EPUB files, which the detector names first; such a file uploaded as `.zip` is still a ZIP archive.
-- PDFs with image-only pages are still rejected with `document_needs_ocr`; a chart is delivered as the image itself.
-- `resources_list` matches binary resources by name only. `resources_search` and `resources_read_markdown` return `resource_has_no_text` for them, explaining that the file can only be downloaded or copied into the sandbox with `sandbox_import`.
-- When a binary resource is attached in Chat, the metadata block the model sees says the file has no text representation.
-- The Resources page hides "View extracted text" for binary resources; renaming, downloading, deleting, and attaching to Chat are unchanged.
+- `resources_list` matches resources without text by name only and reports their reason as `noText`. `resources_search` and `resources_read_markdown` return `resource_has_no_text` with a message for the reason, such as "This PDF contains scanned pages", and say the file can be downloaded or copied into the sandbox with `sandbox_import`.
+- When such a resource is attached in Chat, the metadata block the model sees says why it has no text.
+- The Resources page hides "View extracted text" for them and marks documents without text with a "No text" badge whose tooltip gives the reason; renaming, downloading, deleting, and attaching to Chat are unchanged.
 
 ### Unsupported formats
 
-The first version does not accept XML/RSS/Atom, Jupyter Notebook, MHTML/Web Archive, SVG and other images not listed above, audio, video, executables, or any other format not listed above.
+Resources do not accept MHTML/Web Archive, SVG and other images not listed above, audio, video, executables, or any other format not listed above. XML, RSS, and Atom files are kept as plain text, not parsed as feeds.
 
 ## 6. Data model
 
@@ -149,19 +163,20 @@ The first version does not accept XML/RSS/Atom, Jupyter Notebook, MHTML/Web Arch
 | Field | Type | Notes |
 | --- | --- | --- |
 | `owner` | relation → users | Required; cascade-deleted with the user |
-| `file` | protected file | Authoritative source file, single file, at most 6 MiB |
+| `file` | protected file | Authoritative source file, single file, at most the configured limit (the field allows the 100 MB ceiling); PNG, JPEG, GIF, and WebP get a `480x0` thumbnail |
 | `original_name` | text | Original file name at upload, at most 255 characters, immutable after creation |
 | `display_name` | text | User-editable display name, defaults to the original file name, at most 255 characters |
 | `media_type` | text | Media type detected and normalized by the server, immutable after creation |
 | `size` | number | Source file byte count confirmed by the server, immutable after creation |
 | `sha256` | hidden text | SHA-256 of the source file, immutable after creation |
-| `converted_markdown` | text | Full Markdown from conversion or pass-through, at most 8 MiB, immutable after creation; empty for binary resources |
+| `converted_markdown` | text | Full Markdown from conversion or pass-through, at most 8 MiB, immutable after creation; empty for resources without text |
 | `converted_size` | number | UTF-8 byte count of the Markdown |
+| `no_text_reason` | select | Empty for resources with Markdown; otherwise `binary`, `needs_ocr`, `encrypted`, `empty`, or `too_complex`, immutable after creation |
 | `created`, `updated` | autodate | Record timestamps |
 
 `sha256 + original_name` is unique per owner. Uploading the same content with the same original file name reuses the existing resource. The same content under a different original file name is a different resource, so users never accidentally merge files that mean different things.
 
-A record always has a source file, and every resource except a binary one has a non-empty `converted_markdown`. An upload whose conversion fails never reaches the database, so there is no "exists but unusable" intermediate state, and readers never need to check a status.
+A record always has a source file. It has a non-empty `converted_markdown` exactly when `no_text_reason` is empty, so readers check that one field. An upload whose conversion fails for any other reason never reaches the database.
 
 Apart from `display_name`, a resource record never changes after creation. Issuing and revoking download links never writes to this collection, so `updated` always reflects what the user did to the resource itself.
 
@@ -193,7 +208,7 @@ A resource upload is one authenticated multipart request that accepts exactly on
 The server runs these steps in order:
 
 1. Validate the current user and the upload fields;
-2. Validate the original name and the strict 6 MiB size limit;
+2. Validate the original name and the configured size limit;
 3. Detect the media type from the file content and match it against the allow list;
 4. Compute the SHA-256 and look up a reusable resource, returning it directly on a hit;
 5. Choose the pass-through, go-anydoc, or HTML path by format and produce the Markdown in memory;
@@ -753,7 +768,7 @@ Stable error codes include at least:
 - `invalid_resource_cursor`
 - `download_lease_expired`
 
-`document_encrypted`, `document_malformed`, and `document_needs_ocr` map directly from the converter's error classes (`ErrEncrypted`, `ErrMalformed`, `ErrNeedsOCR`), to tell "the file has a password", "the file is corrupt", and "the file contains scanned pages" apart from "the format is not supported".
+`document_encrypted`, `document_malformed`, and `document_needs_ocr` map directly from the converter's error classes (`ErrEncrypted`, `ErrMalformed`, `ErrNeedsOCR`), to tell "the file has a password", "the file is corrupt", and "the file contains scanned pages" apart from "the format is not supported". Uploads now keep encrypted and scanned documents without text, as they do documents whose output is empty or too large, so only `document_malformed`, the timeout, and `conversion_failed` still fail an upload; the other codes remain for exports and logs.
 
 Underlying parser errors, stacks, file paths, and third-party diagnostics are written only to server logs; the API and Assistant tools return only stable codes and safe descriptions.
 
@@ -766,7 +781,7 @@ Underlying parser errors, stacks, file paths, and third-party diagnostics are wr
 - A successful resource stores the protected source file, metadata, SHA-256, and non-empty converted Markdown together; a binary resource stores no Markdown.
 - Uploading PNG, JPEG, GIF, WebP, and ZIP files succeeds and `resources_read_markdown` returns `resource_has_no_text` for them; uploading SVG is rejected.
 - When conversion fails, times out, or produces empty or oversized output, the upload fails as a whole, leaves no resource record or orphaned file, and returns a stable error code.
-- PDFs with scanned pages (whether all or only some pages) are rejected at upload, with the pages that need OCR clearly stated.
+- PDFs with scanned pages (whether all or only some pages) and encrypted documents are kept without text, marked "No text" with the reason, and can be downloaded or imported into the sandbox.
 - Encrypted and corrupt documents return error codes that differ from each other and from "unsupported format".
 - Users cannot view, download, rename, delete, search, or read other users' resources, or create download credentials for them.
 - When the same owner uploads the same content under the same original name, the existing resource is reused.
@@ -808,13 +823,13 @@ Underlying parser errors, stacks, file paths, and third-party diagnostics are wr
 - `resources_list`, `resources_search`, and `resources_read_markdown` appear in the Workavera MCP Server's tool list, scoped to the API key's owner and unaffected by `allow_destructive`; the two download link tools do not appear in the MCP tool list.
 - The database contains only the `user_resources` and `resource_download_leases` collections, with no message relation collection.
 - Uploading `.html`/`.htm` produces Markdown that keeps headings, lists, tables, and links, with no scripts, styles, or inline `data:` images in the result; pages in non-UTF-8 encodings decode correctly; conversion makes no network requests.
-- Scanned PDFs, exact page reading, OCR, semantic search, Feed/Notebook, MHTML/Web Archive, SVG, and provider file IDs are not mislabeled as supported in the first version.
+- Server-side OCR, exact page reading, semantic search, feed parsing, MHTML/Web Archive, SVG, and provider file IDs are not mislabeled as supported.
 
 ## 16. Product choices to confirm in this draft
 
 This draft sets the following first-version rules, each of which can be adjusted independently during review:
 
-1. **A failed conversion fails the upload**: no record is created, no source file is kept, and no retry is offered. The cost is that scanned PDFs and encrypted documents cannot enter the resource library at all, even when the user only wants to keep the file for download. Keeping such files would require reintroducing some kind of "saved but without a body" representation.
+1. **A document without extractable text is kept, other failed conversions fail the upload.** Scanned, encrypted, empty, and oversized documents are stored without Markdown and marked with `no_text_reason`, so the user can keep and download them and process them in the sandbox, such as OCRing a scan. A damaged file, a timeout, or another conversion failure still creates no record and keeps no source file.
 2. **Download credentials are not counted**; they are bounded only by the 5-minute validity, and revoking deletes the record. The cost is that a link can be downloaded any number of times while valid; in exchange, the download path has no database writes and no concurrent decrements.
 3. **URLs containing plaintext tokens are persisted with tool results in the conversation history**, so the Assistant can hand them to external tools in later steps or later turns. The cost is that a usable credential exists in the database while valid, and conversation exports and backups carry it. If that is unacceptable, the alternative is to strip the URL at persistence time and keep only `leaseId`, but then the Assistant could only use the link within the same turn.
 4. **The revoke tool needs no approval card**, because it only takes permission away. If every credential operation should leave an approval trail, it can be changed to require approval.
@@ -827,5 +842,5 @@ This draft sets the following first-version rules, each of which can be adjusted
 11. `resources_read_markdown` returns at most 100,000 characters per call and supports logically reading the full text through cursors.
 12. **Compiler mode with an on-disk compilation cache, a converter created on demand and closed after use, and a concurrency limit of 2.** With a cache hit, creating an instance takes only about 7 ms, so it is not kept resident: it uses no memory while idle, at most about 100 MiB per conversion in progress, and about 200 MiB at the ceiling; converting a 1.3 MB PDF takes about 0.3 seconds. That beats interpreter mode on startup, memory, and latency, so no switch to downgrade the execution mode is provided. The cost is a peak of about 550 MiB to compile on every cache miss, including the one after a container rebuild; warming in the background at startup moves that compilation into the startup phase. The cache is built at run time, so image and binary deployments behave the same, and nothing is warmed at build time. The concurrency limit of 2 assumes uploads are not frequent; it can be raised for more throughput, and the ceiling rises linearly with it.
 13. **Follow go-anydoc v0.3.1 onto the wazy runtime.** wazy descends from wazero and is also pure Go; on this workload it is faster and allocates orders of magnitude less, with about 7 ms to start on a cache hit and about 0.3 seconds to convert a 1.3 MB PDF. The cost is that it is young, maintained by a single author, and makes no API stability promise. It is acceptable because we maintain go-anydoc ourselves: the wazy version is pinned inside go-anydoc, and Workavera only depends on go-anydoc's `New`/`Convert`/`Close` interface. If wazy develops a problem we cannot accept, go-anydoc can switch back to wazero internally (v0.1.3 is the wazero implementation) with no change on the Workavera side.
-14. The first version does not support Feed, Jupyter, MHTML/Web Archive, SVG, OCR, or reading by exact page, slide, or sheet range. HTML is supported through a separate html-to-markdown path: anydoc does not parse HTML, and the pure-Go conversion library adds only about 0.7 MB while reusing the existing `x/net/html`. The cost is that HTML conversion runs outside the wasm sandbox and cannot be interrupted mid-way, relying on the 6 MiB input limit and linear-time parsing to stay bounded.
+14. Resources do not parse feeds or support MHTML/Web Archive, SVG, server-side OCR, or reading by exact page, slide, or sheet range. HTML is supported through a separate html-to-markdown path: anydoc does not parse HTML, and the pure-Go conversion library adds only about 0.7 MB while reusing the existing `x/net/html`. The cost is that HTML conversion runs outside the wasm sandbox and cannot be interrupted mid-way, relying on the size limit and linear-time parsing to stay bounded.
 15. **The read-only resource tools ship with MCP, while the download link tools stay in Chat only.** The read-only tools are treated the same as the Docs and Reading tools. A download link is a bearer credential, and creating one requires an approval that shows the target resource and purpose each time, which the MCP side has no interface for. The cost is that MCP clients cannot get the original source file and can only read the converted Markdown.

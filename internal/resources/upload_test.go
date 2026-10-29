@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
@@ -137,7 +138,7 @@ func TestUploadRejectsInvalidFilesWithoutSavingAnything(t *testing.T) {
 		code string
 	}{
 		{"empty", "empty.txt", nil, CodeFileEmpty},
-		{"too large", "big.txt", bytes.Repeat([]byte("a"), MaxFileSize+1), CodeFileTooLarge},
+		{"too large", "big.txt", bytes.Repeat([]byte("a"), 10*1024*1024+1), CodeFileTooLarge},
 		{"pdf disguised as text", "report.txt", []byte("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n"), CodeUnsupportedMediaType},
 		{"text disguised as pdf", "report.pdf", []byte("just some text"), CodeUnsupportedMediaType},
 		{"unsupported extension", "tool.exe", []byte("MZ\x90\x00"), CodeUnsupportedMediaType},
@@ -171,13 +172,9 @@ func TestConversionFailuresMapToStableCodesAndSaveNothing(t *testing.T) {
 		code    string
 		message string
 	}{
-		{"needs ocr", "", &anydoc.ConvertError{Kind: anydoc.ErrNeedsOCR, Detail: "page 2 of 3 needs OCR"}, CodeDocumentNeedsOCR, "page 2 of 3 needs OCR"},
-		{"encrypted", "", &anydoc.ConvertError{Kind: anydoc.ErrEncrypted, Detail: "/secret/path"}, CodeDocumentEncrypted, "password-protected"},
-		{"malformed", "", &anydoc.ConvertError{Kind: anydoc.ErrMalformed}, CodeDocumentMalformed, "damaged"},
+		{"malformed", "", &anydoc.ConvertError{Kind: anydoc.ErrMalformed, Detail: "/secret/path"}, CodeDocumentMalformed, "damaged"},
 		{"timeout", "", context.DeadlineExceeded, CodeConversionTimeout, "too long"},
 		{"other", "", errors.New("parser stack trace"), CodeConversionFailed, "could not be converted"},
-		{"empty output", "  \n<!-- page 1 -->\n---\n", nil, CodeConvertedContentEmpty, "No text"},
-		{"oversized output", strings.Repeat("a", MaxMarkdownSize+1), nil, CodeConvertedContentTooLarge, "8 MB"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -367,5 +364,99 @@ func TestSaveUsesTheRegisteredConverterAndDisplayName(t *testing.T) {
 	again, err := Save(context.Background(), app, owner.Id, "out.txt", "Another name", []byte("hello"))
 	if err != nil || again.ID != resource.ID || again.DisplayName != "Quarterly numbers" {
 		t.Fatalf("saving the same file again must return the existing resource unchanged: %#v %v", again, err)
+	}
+}
+
+func TestDocumentsWithoutTextAreKeptWithTheReason(t *testing.T) {
+	pdf := []byte("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n")
+	cases := []struct {
+		name   string
+		output string
+		err    error
+		reason string
+		says   string
+	}{
+		{"needs ocr", "", &anydoc.ConvertError{Kind: anydoc.ErrNeedsOCR, Detail: "page 2 of 3 needs OCR"}, NoTextNeedsOCR, "scanned pages"},
+		{"encrypted", "", &anydoc.ConvertError{Kind: anydoc.ErrEncrypted}, NoTextEncrypted, "password-protected"},
+		{"resource limit", "", &anydoc.ConvertError{Kind: anydoc.ErrResourceLimit}, NoTextTooLarge, "too large or complex"},
+		{"empty output", "  \n<!-- page 1 -->\n---\n", nil, NoTextEmpty, "only images"},
+		{"oversized output", strings.Repeat("a", MaxMarkdownSize+1), nil, NoTextTooLarge, "too large or complex"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			owner := createTestUser(t, app, "resource-no-text@example.com")
+			conv := newTestConverter(app, func(context.Context, []byte, string) (string, error) {
+				return test.output, test.err
+			})
+			resource, err := Upload(context.Background(), app, conv, owner.Id, "Scan.pdf", pdf)
+			if err != nil {
+				t.Fatalf("a document without text must be kept: %v", err)
+			}
+			if resource.NoTextReason != test.reason || resource.ConvertedSize != 0 || resource.MediaType != "application/pdf" {
+				t.Fatalf("unexpected resource: %#v", resource)
+			}
+			_, err = Read(context.Background(), app, owner.Id, resource.ID, "", 0)
+			var resourceErr *Error
+			if !errors.As(err, &resourceErr) || resourceErr.Code != CodeResourceHasNoText || !strings.Contains(resourceErr.Message, test.says) {
+				t.Fatalf("reading must explain the missing text, got %v", err)
+			}
+		})
+	}
+}
+
+func TestWiderTypesAndConfiguredSizeLimit(t *testing.T) {
+	app := newTestApp(t)
+	owner := createTestUser(t, app, "resource-types@example.com")
+	conv := newTestConverter(app, nil)
+	ctx := context.Background()
+
+	for name, mediaType := range map[string]string{"main.py": "text/x-python", "deploy.yaml": "application/yaml", "rows.tsv": "text/tab-separated-values", "feed.xml": "application/xml"} {
+		resource, err := Upload(ctx, app, conv, owner.Id, name, []byte("key: value\n"))
+		if err != nil || resource.MediaType != mediaType || resource.NoTextReason != "" || resource.ConvertedSize == 0 {
+			t.Fatalf("%s must be stored as text: %#v %v", name, resource, err)
+		}
+	}
+	var archive bytes.Buffer
+	writer := tar.NewWriter(&archive)
+	if err := writer.WriteHeader(&tar.Header{Name: "notes.txt", Mode: 0o644, Size: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte("hello")); err != nil || writer.Close() != nil {
+		t.Fatal(err)
+	}
+	bmp := append([]byte{'B', 'M', 0x3a, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, 0x28, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0x18, 0}, make([]byte, 32)...)
+	for name, data := range map[string][]byte{
+		"scan.tiff":   []byte("II*\x00\x08\x00\x00\x00"),
+		"photo.bmp":   bmp,
+		"IMG_01.HEIC": append([]byte{0, 0, 0, 0x18}, []byte("ftypheic\x00\x00\x00\x00mif1heic")...),
+		"backup.gz":   []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00"),
+		"backup.tar":  archive.Bytes(),
+		"archive.7z":  []byte("7z\xbc\xaf\x27\x1c\x00\x04"),
+	} {
+		resource, err := Upload(ctx, app, conv, owner.Id, name, data)
+		if err != nil || resource.NoTextReason != NoTextBinary || !IsBinary(resource.MediaType) {
+			t.Fatalf("%s must be stored as binary: %#v %v", name, resource, err)
+		}
+	}
+	if _, err := Upload(ctx, app, conv, owner.Id, "tool.py", []byte("MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff")); errorCode(err) != CodeUnsupportedMediaType {
+		t.Fatalf("binary content behind a code extension must be refused, got %v", err)
+	}
+
+	if _, err := Upload(ctx, app, conv, owner.Id, "big.txt", bytes.Repeat([]byte("a"), 7*1024*1024)); err != nil {
+		t.Fatalf("7 MB is within the default 10 MB limit: %v", err)
+	}
+	record, err := app.FindFirstRecordByFilter("configs", `key = "resources.max_file_size_mb"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Set("value", "2")
+	if err := app.Save(record); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Upload(ctx, app, conv, owner.Id, "other.txt", bytes.Repeat([]byte("b"), 3*1024*1024))
+	var resourceErr *Error
+	if !errors.As(err, &resourceErr) || resourceErr.Code != CodeFileTooLarge || !strings.Contains(resourceErr.Message, "2 MB") {
+		t.Fatalf("the configured limit must apply, got %v", err)
 	}
 }

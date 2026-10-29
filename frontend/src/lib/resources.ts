@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react"
 import { ClientResponseError, type RecordModel } from "pocketbase"
 
 import { pb } from "@/lib/pocketbase"
 
 export const RESOURCES_COLLECTION = "user_resources"
 export const RESOURCE_LEASES_COLLECTION = "resource_download_leases"
-export const RESOURCE_MAX_SIZE = 6 * 1024 * 1024
+/** The size limit until the server's setting is known. */
+const DEFAULT_RESOURCE_MAX_SIZE = 10 * 1024 * 1024
 export const MAX_MESSAGE_RESOURCES = 6
 
 /** Every extension the server accepts. `accept` is only a hint: the server
@@ -42,21 +44,113 @@ export const RESOURCE_EXTENSIONS = [
   "jpeg",
   "gif",
   "webp",
+  "tif",
+  "tiff",
+  "bmp",
+  "heic",
   "zip",
+  "tar",
+  "gz",
+  "tgz",
+  "7z",
+  "tsv",
+  "log",
+  "ipynb",
+  "xml",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "env",
+  "sql",
+  "sh",
+  "bash",
+  "zsh",
+  "py",
+  "js",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "jsx",
+  "go",
+  "rs",
+  "java",
+  "kt",
+  "swift",
+  "c",
+  "h",
+  "cpp",
+  "cc",
+  "hpp",
+  "cs",
+  "rb",
+  "php",
+  "lua",
+  "r",
+  "css",
+  "scss",
+  "vue",
+  "svelte",
 ]
 
-/** Media types stored without text: they can be downloaded but have no
- * extracted text to view, search, or read. */
-const BINARY_MEDIA_TYPES = new Set([
+/** Images the browser shows inline and the server makes thumbnails of. */
+const PREVIEWABLE_IMAGES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
-  "application/zip",
 ])
 
-export function isBinaryResource(mediaType: string) {
-  return BINARY_MEDIA_TYPES.has(mediaType)
+export function isPreviewableImage(mediaType: string) {
+  return PREVIEWABLE_IMAGES.has(mediaType)
+}
+
+/** Why a resource has no extracted text, for the Resources page. */
+export const NO_TEXT_LABELS: Record<string, string> = {
+  binary: "Not a text format; it can be downloaded.",
+  needs_ocr:
+    "Scanned PDF: no text was extracted. OCR in the sandbox can add it.",
+  encrypted: "Password-protected: no text was extracted.",
+  empty: "No text could be extracted; the file may contain only images.",
+  too_complex: "Too large or complex for text extraction.",
+}
+
+let maxSizeRequest: Promise<number> | null = null
+
+/** The largest resource file the server accepts, read once per session. */
+function loadResourceMaxSize() {
+  maxSizeRequest ??= pb
+    .send<{ resourceMaxFileSize?: number }>("/api/configs/system", {
+      requestKey: null,
+    })
+    .then((config) => config.resourceMaxFileSize || DEFAULT_RESOURCE_MAX_SIZE)
+    .catch(() => {
+      maxSizeRequest = null
+      return DEFAULT_RESOURCE_MAX_SIZE
+    })
+  return maxSizeRequest
+}
+
+export function useResourceMaxSize() {
+  const [size, setSize] = useState(DEFAULT_RESOURCE_MAX_SIZE)
+  useEffect(() => {
+    let cancelled = false
+    void loadResourceMaxSize().then((value) => {
+      if (!cancelled) setSize(value)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return size
+}
+
+/** "10 MB" for a byte limit in whole megabytes. */
+export function formatSizeLimit(bytes: number) {
+  return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
 export const RESOURCE_ACCEPT = RESOURCE_EXTENSIONS.map((ext) => `.${ext}`).join(
@@ -65,7 +159,7 @@ export const RESOURCE_ACCEPT = RESOURCE_EXTENSIONS.map((ext) => `.${ext}`).join(
 
 /** Fields a listing needs; converted_markdown can be 8 MB and is never listed. */
 export const RESOURCE_LIST_FIELDS =
-  "id,display_name,original_name,media_type,size,file,url,created,updated"
+  "id,display_name,original_name,media_type,size,no_text_reason,file,url,created,updated"
 
 export type Resource = {
   id: string
@@ -73,6 +167,7 @@ export type Resource = {
   original_name: string
   media_type: string
   size: number
+  no_text_reason: string
   file: string
   url: string
   created: string
@@ -92,9 +187,9 @@ export type ResourceLease = {
 const ERROR_MESSAGES: Record<string, string> = {
   file_required: "Choose a file to upload.",
   file_empty: "The file is empty.",
-  file_too_large: "Files must be 6 MB or smaller.",
+  file_too_large: "The file is larger than the server allows.",
   unsupported_media_type:
-    "This file type is not supported. Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, JSON, PNG, JPEG, GIF, WebP, or ZIP files.",
+    "This file type is not supported. Upload documents (PDF, Office, OpenDocument, RTF, EPUB, HTML), text, Markdown, code, or data files, images, or ZIP, TAR, GZIP, and 7z archives.",
   unsupported_encoding: "The file's text encoding is not supported.",
   invalid_filename: "The file name is missing or invalid.",
   conversion_failed: "The document could not be converted to text.",
@@ -114,7 +209,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 export function resourceErrorMessage(error: unknown, fallback: string) {
   if (error instanceof ClientResponseError) {
     const code = error.response?.code as string | undefined
-    if (code === "document_needs_ocr" && error.response?.message) {
+    if (
+      (code === "document_needs_ocr" || code === "file_too_large") &&
+      error.response?.message
+    ) {
       return error.response.message as string
     }
     if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code]
@@ -161,17 +259,37 @@ export function resourceTypeTone(mediaType: string, name: string) {
     return tileTones.slides
   if (mediaType === "text/html" || mediaType.includes("json"))
     return tileTones.code
-  if (mediaType === "application/zip") return tileTones.archive
+  if (
+    mediaType === "application/zip" ||
+    mediaType === "application/x-tar" ||
+    mediaType === "application/gzip" ||
+    mediaType === "application/x-7z-compressed"
+  )
+    return tileTones.archive
+  if (
+    mediaType.startsWith("text/x-") ||
+    mediaType === "text/javascript" ||
+    mediaType === "text/css" ||
+    ["xml", "yaml", "toml", "sql", "x-sh", "x-ipynb+json"].some(
+      (subtype) => mediaType === `application/${subtype}`
+    )
+  )
+    return tileTones.code
   return tileTones.text
 }
 
 /** Checks what can be checked before uploading; the server checks again. */
-export function validateResourceFile(file: File): string | null {
+export function validateResourceFile(
+  file: File,
+  maxSize: number
+): string | null {
   if (!RESOURCE_EXTENSIONS.includes(fileExtension(file.name))) {
     return ERROR_MESSAGES.unsupported_media_type
   }
   if (file.size === 0) return ERROR_MESSAGES.file_empty
-  if (file.size > RESOURCE_MAX_SIZE) return ERROR_MESSAGES.file_too_large
+  if (file.size > maxSize) {
+    return `Files must be ${formatSizeLimit(maxSize)} or smaller.`
+  }
   return null
 }
 
@@ -201,6 +319,14 @@ const FORMAT_LABELS: Record<string, string> = {
   "application/vnd.oasis.opendocument.text": "ODT",
   "application/vnd.oasis.opendocument.spreadsheet": "ODS",
   "application/vnd.oasis.opendocument.presentation": "ODP",
+  "text/tab-separated-values": "TSV",
+  "application/x-ipynb+json": "Notebook",
+  "application/x-sh": "Shell",
+  "application/gzip": "GZIP",
+  "application/x-7z-compressed": "7z",
+  "text/javascript": "JavaScript",
+  "text/x-c++": "C++",
+  "text/x-csharp": "C#",
 }
 
 /** A short human label for a media type, such as "PDF" or "Word". */
@@ -210,7 +336,8 @@ export function formatLabel(mediaType: string) {
   if (mediaType.includes("presentation") || mediaType.includes("powerpoint"))
     return "PowerPoint"
   if (mediaType.includes("sheet") || mediaType.includes("excel")) return "Excel"
-  return mediaType.split("/").pop()?.toUpperCase() ?? "File"
+  const subtype = mediaType.split("/").pop()?.replace(/^x-/, "") ?? ""
+  return subtype ? subtype.toUpperCase() : "File"
 }
 
 /** Formats a byte count with 1024-based units, such as "2.4 MB". */

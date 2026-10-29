@@ -21,6 +21,7 @@ import {
   ResourcePreviewDialog,
 } from "@/components/resources/resource-dialogs"
 import { ResourceIcon } from "@/components/resources/resource-icon"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -43,10 +44,12 @@ import {
 import {
   formatBytes,
   formatLabel,
-  isBinaryResource,
+  formatSizeLimit,
+  NO_TEXT_LABELS,
   openResourceFile,
   RESOURCE_ACCEPT,
   resourceErrorMessage,
+  useResourceMaxSize,
   validateResourceFile,
   type Resource,
 } from "@/lib/resources"
@@ -71,6 +74,7 @@ export function ResourcesPage() {
   const [query, setQuery] = useState("")
   const [loaded, setLoaded] = useState(false)
   const [uploading, setUploading] = useState(0)
+  const maxSize = useResourceMaxSize()
   const [dialog, setDialog] = useState<{
     kind: DialogKind
     resource: Resource
@@ -86,7 +90,7 @@ export function ResourcesPage() {
 
   const uploadFiles = async (files: File[]) => {
     for (const file of files) {
-      const invalid = validateResourceFile(file)
+      const invalid = validateResourceFile(file, maxSize)
       if (invalid) {
         toast.error(`${file.name}: ${invalid}`)
         continue
@@ -194,7 +198,7 @@ export function ResourcesPage() {
           <p className="text-sm text-muted-foreground">
             {query.trim()
               ? "Try a different name."
-              : "Upload PDF, Office, OpenDocument, RTF, EPUB, CSV, HTML, text, Markdown, JSON, image, or ZIP files up to 6 MB."}
+              : `Upload documents, text, code, data, images, or archives up to ${formatSizeLimit(maxSize)}.`}
           </p>
         </div>
       ) : (
@@ -235,7 +239,18 @@ export function ResourcesPage() {
                     </button>
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    {formatLabel(resource.media_type)}
+                    <span className="flex items-center gap-2">
+                      {formatLabel(resource.media_type)}
+                      {resource.no_text_reason &&
+                        resource.no_text_reason !== "binary" && (
+                          <Badge
+                            variant="outline"
+                            title={NO_TEXT_LABELS[resource.no_text_reason]}
+                          >
+                            No text
+                          </Badge>
+                        )}
+                    </span>
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
                     {formatBytes(resource.size)}
@@ -282,7 +297,7 @@ export function ResourcesPage() {
                           <HugeiconsIcon icon={Link04Icon} strokeWidth={2} />
                           Download links
                         </DropdownMenuItem>
-                        {!isBinaryResource(resource.media_type) && (
+                        {!resource.no_text_reason && (
                           <DropdownMenuItem
                             onClick={() =>
                               setDialog({ kind: "preview", resource })

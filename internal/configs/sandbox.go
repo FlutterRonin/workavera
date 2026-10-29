@@ -19,7 +19,7 @@ const (
 	SandboxLimitsKey      = "sandbox.limits"
 	SandboxIdleTimeoutKey = "sandbox.idle_timeout_minutes"
 
-	DefaultSandboxImage = "ghcr.io/xusenlin/workavera-sandbox:2"
+	DefaultSandboxImage = "ghcr.io/xusenlin/workavera-sandbox:3"
 )
 
 // SandboxLimits are the resource limits of every sandbox container. Memory
@@ -173,6 +173,8 @@ func validateRecord(event *core.RecordEvent) error {
 		err = ValidateSandboxValue(key, raw)
 	case key == ChatMaxStepsKey:
 		_, err = parseChatMaxSteps(raw)
+	case key == ResourcesMaxFileSizeKey:
+		_, err = parseResourcesMaxFileSize(raw)
 	}
 	if err != nil {
 		return validation.Errors{"value": validation.NewError("validation_invalid_config_value", fmt.Sprintf("Invalid %s: %s.", key, err))}

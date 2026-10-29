@@ -14,14 +14,18 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+
+	"github.com/xusenlin/workavera/internal/configs"
 )
 
 const (
 	CollectionName       = "user_resources"
 	LeasesCollectionName = "resource_download_leases"
 
-	// MaxFileSize is the strict upper bound of a source file, in bytes.
-	MaxFileSize = 6 * 1024 * 1024
+	// MaxFileSizeCeiling is the largest source file any configuration
+	// allows, in bytes. The request body, the file field, and the converter
+	// are sized for it; MaxFileSize is the limit actually enforced.
+	MaxFileSizeCeiling = configs.MaxResourcesMaxFileSizeMB * 1024 * 1024
 	// MaxMarkdownSize is the upper bound of the converted Markdown, in bytes.
 	MaxMarkdownSize = 8 * 1024 * 1024
 	// MaxNameLength bounds original and display names, in characters.
@@ -104,7 +108,7 @@ func register(app core.App, s *service) {
 		group := event.Router.Group("/api").Bind(apis.RequireAuth("users"))
 		// The multipart envelope adds a little to the file itself; the size
 		// limit that matters is enforced again on the bytes actually read.
-		group.POST("/resources", s.uploadResource).Bind(apis.BodyLimit(MaxFileSize + 1024*1024))
+		group.POST("/resources", s.uploadResource).Bind(apis.BodyLimit(MaxFileSizeCeiling + 1024*1024))
 		group.DELETE("/resources/{id}", s.deleteResource)
 		group.POST("/resources/{id}/download-leases", s.createLease)
 		group.DELETE("/resource-download-leases/{id}", s.revokeLease)
@@ -133,8 +137,14 @@ func register(app core.App, s *service) {
 	}
 }
 
+// MaxFileSize is the largest resource file the administrator allows, in
+// bytes (resources.max_file_size_mb in configs, 10 MB by default).
+func MaxFileSize(app core.App) int64 {
+	return configs.ResourcesMaxFileSize(app)
+}
+
 // immutableFields are fixed at upload; only display_name is editable.
-var immutableFields = []string{"owner", "original_name", "media_type", "size", "sha256", "converted_markdown", "converted_size"}
+var immutableFields = []string{"owner", "original_name", "media_type", "size", "sha256", "converted_markdown", "converted_size", "no_text_reason"}
 
 func guardResourceUpdate(event *core.RecordRequestEvent) error {
 	original := event.Record.Original()
@@ -170,6 +180,7 @@ type Resource struct {
 	MediaType     string `json:"media_type"`
 	Size          int64  `json:"size"`
 	ConvertedSize int64  `json:"converted_size"`
+	NoTextReason  string `json:"no_text_reason"`
 	File          string `json:"file"`
 	URL           string `json:"url"`
 	Created       string `json:"created"`
@@ -184,6 +195,7 @@ func resourceFromRecord(record *core.Record) Resource {
 		MediaType:     record.GetString("media_type"),
 		Size:          int64(record.GetInt("size")),
 		ConvertedSize: int64(record.GetInt("converted_size")),
+		NoTextReason:  record.GetString("no_text_reason"),
 		File:          record.GetString("file"),
 		URL:           fileURL(record),
 		Created:       record.GetDateTime("created").String(),
@@ -328,7 +340,7 @@ func Source(app core.App, ownerID, id string) (SourceFile, error) {
 		return SourceFile{}, err
 	}
 	defer reader.Close()
-	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSize+1))
+	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSizeCeiling+1))
 	if err != nil {
 		return SourceFile{}, err
 	}

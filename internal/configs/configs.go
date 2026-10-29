@@ -54,5 +54,8 @@ func SystemLocation(app core.App) *time.Location {
 }
 
 func getSystemConfig(event *core.RequestEvent) error {
-	return event.JSON(http.StatusOK, map[string]string{"timezone": SystemLocation(event.App).String()})
+	return event.JSON(http.StatusOK, map[string]any{
+		"timezone":            SystemLocation(event.App).String(),
+		"resourceMaxFileSize": ResourcesMaxFileSize(event.App),
+	})
 }
