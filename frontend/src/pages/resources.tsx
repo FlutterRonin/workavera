@@ -31,6 +31,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -48,12 +62,14 @@ import {
   NO_TEXT_LABELS,
   openResourceFile,
   RESOURCE_ACCEPT,
+  RESOURCE_TYPE_FILTERS,
   resourceErrorMessage,
   useResourceMaxSize,
   validateResourceFile,
   type Resource,
+  type ResourceTypeFilter,
 } from "@/lib/resources"
-import { useResourcesStore } from "@/store/resources"
+import { RESOURCES_PER_PAGE, useResourcesStore } from "@/store/resources"
 
 type DialogKind = "rename" | "delete" | "links" | "preview"
 
@@ -69,6 +85,10 @@ export function ResourcesPage() {
   const resources = useResourcesStore((state) => state.resources)
   const loading = useResourcesStore((state) => state.loading)
   const error = useResourcesStore((state) => state.error)
+  const type = useResourcesStore((state) => state.type)
+  const page = useResourcesStore((state) => state.page)
+  const totalItems = useResourcesStore((state) => state.totalItems)
+  const totalPages = useResourcesStore((state) => state.totalPages)
   const fetchResources = useResourcesStore((state) => state.fetchResources)
   const upload = useResourcesStore((state) => state.upload)
   const [query, setQuery] = useState("")
@@ -83,7 +103,7 @@ export function ResourcesPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fetchResources(query).finally(() => setLoaded(true))
+      void fetchResources({ query, page: 1 }).finally(() => setLoaded(true))
     }, 200)
     return () => window.clearTimeout(timer)
   }, [fetchResources, query])
@@ -123,26 +143,58 @@ export function ResourcesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <HugeiconsIcon
-                icon={FolderLibraryIcon}
-                strokeWidth={2}
-                className="size-4"
-              />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Resources</h1>
-            <span className="text-sm text-muted-foreground">
-              {resources.length}
-            </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <HugeiconsIcon
+              icon={FolderLibraryIcon}
+              strokeWidth={2}
+              className="size-4"
+            />
           </div>
-          <p className="text-sm text-muted-foreground">
-            Upload a file once, then attach it in Chat with the + button or by
-            typing #.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Resources</h1>
+          <span className="text-sm text-muted-foreground">{totalItems}</span>
         </div>
+        <p className="text-sm text-muted-foreground">
+          Upload a file once, then attach it in Chat with the + button or by
+          typing #.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <HugeiconsIcon
+            icon={Search02Icon}
+            strokeWidth={2}
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name…"
+            className="pl-9"
+          />
+        </div>
+        <Select
+          value={type}
+          onValueChange={(value) =>
+            void fetchResources({
+              type: value as ResourceTypeFilter,
+              page: 1,
+            })
+          }
+        >
+          <SelectTrigger className="w-40" aria-label="Filter by type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {RESOURCE_TYPE_FILTERS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <input
           ref={inputRef}
           type="file"
@@ -156,6 +208,7 @@ export function ResourcesPage() {
           }}
         />
         <Button
+          className="ml-auto"
           onClick={() => inputRef.current?.click()}
           disabled={uploading > 0}
         >
@@ -166,20 +219,6 @@ export function ResourcesPage() {
           )}
           {uploading > 0 ? "Uploading…" : "Upload"}
         </Button>
-      </div>
-
-      <div className="relative max-w-sm">
-        <HugeiconsIcon
-          icon={Search02Icon}
-          strokeWidth={2}
-          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name…"
-          className="pl-9"
-        />
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -193,11 +232,13 @@ export function ResourcesPage() {
       ) : resources.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed p-10 text-center">
           <p className="font-medium">
-            {query.trim() ? "No matching resources" : "No resources yet"}
+            {query.trim() || type !== "all"
+              ? "No matching resources"
+              : "No resources yet"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {query.trim()
-              ? "Try a different name."
+            {query.trim() || type !== "all"
+              ? "Try a different name or type."
               : `Upload documents, text, code, data, images, or archives up to ${formatSizeLimit(maxSize)}.`}
           </p>
         </div>
@@ -324,6 +365,42 @@ export function ResourcesPage() {
               ))}
             </TableBody>
           </Table>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2">
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {(page - 1) * RESOURCES_PER_PAGE + 1}–
+              {(page - 1) * RESOURCES_PER_PAGE + resources.length} of{" "}
+              {totalItems}
+            </span>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    text="Prev"
+                    onClick={() => void fetchResources({ page: page - 1 })}
+                    className={
+                      page <= 1 || loading
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+                <span className="flex items-center px-2 text-xs text-muted-foreground tabular-nums">
+                  {page} / {Math.max(1, totalPages)}
+                </span>
+                <PaginationItem>
+                  <PaginationNext
+                    text="Next"
+                    onClick={() => void fetchResources({ page: page + 1 })}
+                    className={
+                      page >= totalPages || loading
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
         </div>
       )}
 

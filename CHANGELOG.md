@@ -14,8 +14,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
   or JSON file is stored as it is, and its text is extracted to Markdown in
   the same request; the server checks the real file type rather than
   trusting the extension, and a damaged document is refused with a clear
-  reason. Files can be searched by name, opened, downloaded,
-  renamed, and deleted, and their extracted text can be viewed. In Chat, the
+  reason. Files are listed 20 to a page, can be searched by name and filtered
+  by type (PDF, documents, spreadsheets, presentations, images, code and data,
+  or archives), and can be opened, downloaded, renamed, and deleted, and their
+  extracted text can be viewed. In Chat, the
   `+` button or dropping a file uploads it right away, and typing `#` picks an
   existing resource; a message can carry up to six files, with or without
   text. The assistant sees what was attached without the content and reads or

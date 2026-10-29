@@ -161,6 +161,86 @@ export const RESOURCE_ACCEPT = RESOURCE_EXTENSIONS.map((ext) => `.${ext}`).join(
 export const RESOURCE_LIST_FIELDS =
   "id,display_name,original_name,media_type,size,no_text_reason,file,url,created,updated"
 
+function mediaTypeIn(...mediaTypes: string[]) {
+  return mediaTypes.map((type) => `media_type = "${type}"`)
+}
+
+function mediaTypeLike(...patterns: string[]) {
+  return patterns.map((pattern) => `media_type ~ "${pattern}"`)
+}
+
+/** The Resources page's type filters, grouped the way the type tiles are and
+ * written as PocketBase filters on media_type so they work across pages. */
+export const RESOURCE_TYPE_FILTERS = [
+  { value: "all", label: "All types", filter: [] },
+  { value: "pdf", label: "PDF", filter: mediaTypeIn("application/pdf") },
+  {
+    value: "documents",
+    label: "Documents",
+    filter: [
+      ...mediaTypeLike("word", "opendocument.text"),
+      ...mediaTypeIn(
+        "application/rtf",
+        "text/rtf",
+        "application/epub+zip",
+        "text/plain",
+        "text/markdown"
+      ),
+    ],
+  },
+  {
+    value: "spreadsheets",
+    label: "Spreadsheets",
+    filter: [
+      ...mediaTypeLike("sheet", "excel"),
+      ...mediaTypeIn("text/csv", "text/tab-separated-values"),
+    ],
+  },
+  {
+    value: "presentations",
+    label: "Presentations",
+    filter: mediaTypeLike("presentation", "powerpoint"),
+  },
+  { value: "images", label: "Images", filter: mediaTypeLike("image/%") },
+  {
+    value: "code",
+    label: "Code & data",
+    filter: [
+      ...mediaTypeLike("json", "text/x-%"),
+      ...mediaTypeIn(
+        "text/html",
+        "application/xhtml+xml",
+        "text/javascript",
+        "text/css",
+        "application/xml",
+        "application/yaml",
+        "application/toml",
+        "application/sql",
+        "application/x-sh"
+      ),
+    ],
+  },
+  {
+    value: "archives",
+    label: "Archives",
+    filter: mediaTypeIn(
+      "application/zip",
+      "application/x-tar",
+      "application/gzip",
+      "application/x-7z-compressed"
+    ),
+  },
+] as const
+
+export type ResourceTypeFilter = (typeof RESOURCE_TYPE_FILTERS)[number]["value"]
+
+/** PocketBase filter for one of RESOURCE_TYPE_FILTERS; "" for all types. */
+export function resourceTypeFilter(type: ResourceTypeFilter) {
+  const conditions: readonly string[] =
+    RESOURCE_TYPE_FILTERS.find((option) => option.value === type)?.filter ?? []
+  return conditions.length ? `(${conditions.join(" || ")})` : ""
+}
+
 export type Resource = {
   id: string
   display_name: string

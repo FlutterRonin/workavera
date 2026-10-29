@@ -8,17 +8,29 @@ import {
   RESOURCE_LIST_FIELDS,
   RESOURCES_COLLECTION,
   resourceErrorMessage,
+  resourceTypeFilter,
   uploadResource,
   type Resource,
   type ResourceLease,
+  type ResourceTypeFilter,
 } from "@/lib/resources"
 
-type ResourcesState = {
-  resources: Resource[]
+export const RESOURCES_PER_PAGE = 20
+
+type ResourceListParams = {
   query: string
+  type: ResourceTypeFilter
+  page: number
+}
+
+type ResourcesState = ResourceListParams & {
+  resources: Resource[]
+  totalItems: number
+  totalPages: number
   loading: boolean
   error: string | null
-  fetchResources: (query?: string) => Promise<void>
+  /** Loads one page of resources; omitted params keep their current value. */
+  fetchResources: (params?: Partial<ResourceListParams>) => Promise<void>
   upload: (file: File) => Promise<Resource>
   rename: (id: string, displayName: string) => Promise<void>
   remove: (id: string) => Promise<void>
@@ -36,21 +48,37 @@ export function resourceNameFilter(query: string) {
 export const useResourcesStore = create<ResourcesState>((set, get) => ({
   resources: [],
   query: "",
+  type: "all",
+  page: 1,
+  totalItems: 0,
+  totalPages: 0,
   loading: false,
   error: null,
 
-  fetchResources: async (query = get().query) => {
-    set({ loading: true, error: null, query })
+  fetchResources: async (params) => {
+    const { query, type, page } = { ...get(), ...params }
+    set({ loading: true, error: null, query, type, page })
     try {
-      const resources = await pb
+      const result = await pb
         .collection(RESOURCES_COLLECTION)
-        .getFullList<Resource>({
-          filter: resourceNameFilter(query),
+        .getList<Resource>(page, RESOURCES_PER_PAGE, {
+          filter: [resourceNameFilter(query), resourceTypeFilter(type)]
+            .filter(Boolean)
+            .join(" && "),
           sort: "-updated",
           fields: RESOURCE_LIST_FIELDS,
           requestKey: "resources-list",
         })
-      set({ resources, loading: false })
+      // A delete can empty the last page; show the one before it instead.
+      if (result.items.length === 0 && page > 1 && result.totalPages > 0) {
+        return get().fetchResources({ page: result.totalPages })
+      }
+      set({
+        resources: result.items,
+        totalItems: result.totalItems,
+        totalPages: result.totalPages,
+        loading: false,
+      })
     } catch (error) {
       if (isRequestAbort(error)) return
       set({
@@ -62,12 +90,8 @@ export const useResourcesStore = create<ResourcesState>((set, get) => ({
 
   upload: async (file) => {
     const resource = await uploadResource(file)
-    set((state) => ({
-      resources: [
-        resource,
-        ...state.resources.filter((item) => item.id !== resource.id),
-      ],
-    }))
+    // Newest first, so the upload lands at the top of the first page.
+    void get().fetchResources({ page: 1 })
     return resource
   },
 
@@ -93,9 +117,7 @@ export const useResourcesStore = create<ResourcesState>((set, get) => ({
       requestKey: null,
     })
     forgetResourceState(id)
-    set((state) => ({
-      resources: state.resources.filter((item) => item.id !== id),
-    }))
+    await get().fetchResources()
   },
 
   fetchMarkdown: async (id) => {
