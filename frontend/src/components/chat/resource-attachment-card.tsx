@@ -33,11 +33,7 @@ import type { ResourceAttachmentData } from "@/types/chat"
  * message was sent and only asks the server whether the resource still
  * exists, to offer open and download or mark it unavailable.
  */
-export function ResourceAttachmentCard({
-  data,
-}: {
-  data: ResourceAttachmentData
-}) {
+function ResourceAttachmentCard({ data }: { data: ResourceAttachmentData }) {
   const [state, setState] = useState<{
     id: string
     resource: Resource | null

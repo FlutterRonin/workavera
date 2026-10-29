@@ -137,6 +137,7 @@ const tileTones = {
   sheet: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   slides: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   code: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  archive: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   text: "bg-muted text-muted-foreground",
 }
 
@@ -160,6 +161,7 @@ export function resourceTypeTone(mediaType: string, name: string) {
     return tileTones.slides
   if (mediaType === "text/html" || mediaType.includes("json"))
     return tileTones.code
+  if (mediaType === "application/zip") return tileTones.archive
   return tileTones.text
 }
 

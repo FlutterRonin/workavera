@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Link } from "react-router"
 import { toast } from "sonner"
 import type { DynamicToolUIPart } from "ai"
@@ -10,7 +10,6 @@ import {
   SourceCodeIcon,
 } from "@hugeicons/core-free-icons"
 
-import { ResourceAttachmentCard } from "@/components/chat/resource-attachment-card"
 import { ResourceIcon } from "@/components/resources/resource-icon"
 import {
   Attachment,
@@ -23,6 +22,7 @@ import {
   AttachmentTitle,
   AttachmentTrigger,
 } from "@/components/ui/attachment"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -35,28 +35,33 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { pb } from "@/lib/pocketbase"
 import {
+  fileExtension,
   formatBytes,
   formatLabel,
   getResourceState,
   openResourceFile,
   RESOURCES_COLLECTION,
   resourceErrorMessage,
+  resourceTypeTone,
   type Resource,
 } from "@/lib/resources"
+import { cn } from "@/lib/utils"
 import { workspaceRecordUrl } from "@/lib/workspace-navigation"
 
 /** Matches the thumbnail size configured on user_resources.file. */
 const THUMB_SIZE = "480x0"
 
-type SentFile =
-  | {
-      kind: "resource"
-      resourceId: string
-      name: string
-      mediaType: string
-      size: number
-    }
-  | { kind: "doc"; docId: string; name: string; docKind: string }
+type SentResource = {
+  kind: "resource"
+  resourceId: string
+  name: string
+  mediaType: string
+  size: number
+}
+
+type SentDoc = { kind: "doc"; docId: string; name: string; docKind: string }
+
+type SentFile = SentResource | SentDoc
 
 function parseFiles(output: unknown): SentFile[] {
   let value = output
@@ -82,9 +87,9 @@ async function protectedFileUrl(resource: Resource, thumb?: string) {
 }
 
 /**
- * The files the assistant sent with chat_send_files, shown as cards: images
- * with a thumbnail that enlarges on click, other resources as attachment
- * cards, and documents linking to Docs.
+ * The files the assistant sent with chat_send_files. Every file is the same
+ * card: images show their thumbnail and enlarge on click, other files show a
+ * preview tile in their type's color, and documents link to Docs.
  */
 export function SentFiles({ part }: { part: DynamicToolUIPart }) {
   const files = parseFiles(part.output)
@@ -98,29 +103,97 @@ export function SentFiles({ part }: { part: DynamicToolUIPart }) {
       {files.map((file) =>
         file.kind === "doc" ? (
           <SentDocCard key={`doc:${file.docId}`} file={file} />
-        ) : file.mediaType.startsWith("image/") ? (
-          <SentImageCard key={`resource:${file.resourceId}`} file={file} />
         ) : (
-          <ResourceAttachmentCard
-            key={`resource:${file.resourceId}`}
-            data={{
-              resourceId: file.resourceId,
-              name: file.name,
-              mediaType: file.mediaType,
-              size: file.size,
-            }}
-          />
+          <SentResourceCard key={`resource:${file.resourceId}`} file={file} />
         )
       )}
     </AttachmentGroup>
   )
 }
 
-function SentImageCard({
-  file,
+/** A vertical card of fixed width, so every sent file has the same size. */
+function FileCard({
+  media,
+  imageMedia = false,
+  title,
+  description,
+  unavailable = false,
+  children,
 }: {
-  file: Extract<SentFile, { kind: "resource" }>
+  media: ReactNode
+  imageMedia?: boolean
+  title: string
+  description: string
+  unavailable?: boolean
+  children?: ReactNode
 }) {
+  return (
+    <Attachment
+      orientation="vertical"
+      className="has-data-[slot=attachment-content]:w-40"
+      state={unavailable ? "idle" : "done"}
+    >
+      <AttachmentMedia
+        variant={imageMedia ? "image" : "icon"}
+        className={cn(unavailable && "grayscale")}
+      >
+        {media}
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle
+          title={title}
+          className={cn(unavailable && "line-through")}
+        >
+          {title}
+        </AttachmentTitle>
+        <AttachmentDescription>{description}</AttachmentDescription>
+      </AttachmentContent>
+      {children}
+    </Attachment>
+  )
+}
+
+/**
+ * The preview of a file without a thumbnail: its type's icon on a tile in
+ * the type's color, labeled with the extension.
+ */
+function FileTile({
+  tone,
+  icon,
+  label,
+}: {
+  tone: string
+  icon: ReactNode
+  label: string
+}) {
+  return (
+    <div
+      className={cn(
+        "relative flex size-full flex-col items-center justify-center gap-3",
+        tone
+      )}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklab,currentColor_14%,transparent),transparent_60%)]"
+      />
+      <div className="relative flex size-16 items-center justify-center rounded-2xl bg-background/80 shadow-sm ring-1 ring-current/10 [&_svg]:size-8!">
+        {icon}
+      </div>
+      {label && (
+        <Badge
+          variant="outline"
+          className="relative border-current/20 bg-background/70 font-mono tracking-wider text-current uppercase"
+        >
+          {label}
+        </Badge>
+      )}
+    </div>
+  )
+}
+
+function SentResourceCard({ file }: { file: SentResource }) {
+  const isImage = file.mediaType.startsWith("image/")
   const [resource, setResource] = useState<Resource | null | undefined>()
   const [thumbUrl, setThumbUrl] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -131,7 +204,7 @@ function SentImageCard({
       .then(async (current) => {
         if (cancelled) return
         setResource(current)
-        if (current) {
+        if (current && isImage) {
           const url = await protectedFileUrl(current, THUMB_SIZE)
           if (!cancelled) setThumbUrl(url)
         }
@@ -142,15 +215,19 @@ function SentImageCard({
     return () => {
       cancelled = true
     }
-  }, [file.resourceId])
+  }, [file.resourceId, isImage])
 
-  const deleted = resource === null
+  const unavailable = resource === null
   const fail = (error: unknown) =>
-    toast.error(resourceErrorMessage(error, "Could not open the image."))
+    toast.error(resourceErrorMessage(error, "Could not open the file."))
 
-  const preview = () => {
+  const open = () => {
     if (!resource) return
-    protectedFileUrl(resource).then(setPreviewUrl).catch(fail)
+    if (isImage) {
+      protectedFileUrl(resource).then(setPreviewUrl).catch(fail)
+    } else {
+      void openResourceFile(resource).catch(fail)
+    }
   }
 
   const download = () => {
@@ -158,30 +235,32 @@ function SentImageCard({
     void openResourceFile(resource, true).catch(fail)
   }
 
-  const description = deleted
+  const description = unavailable
     ? "Deleted"
     : `${formatLabel(file.mediaType)} · ${formatBytes(file.size)}`
 
+  const media =
+    isImage && thumbUrl ? (
+      <img src={thumbUrl} alt={file.name} loading="lazy" />
+    ) : isImage && !unavailable ? (
+      <Skeleton className="size-full rounded-none" />
+    ) : (
+      <FileTile
+        tone={resourceTypeTone(file.mediaType, file.name)}
+        icon={<ResourceIcon mediaType={file.mediaType} />}
+        label={fileExtension(file.name)}
+      />
+    )
+
   return (
     <>
-      <Attachment
-        orientation="vertical"
-        className="w-44"
-        state={deleted ? "idle" : "done"}
+      <FileCard
+        media={media}
+        imageMedia={isImage && !!thumbUrl}
+        title={file.name}
+        description={description}
+        unavailable={unavailable}
       >
-        <AttachmentMedia variant="image">
-          {thumbUrl ? (
-            <img src={thumbUrl} alt={file.name} loading="lazy" />
-          ) : deleted ? (
-            <ResourceIcon mediaType={file.mediaType} />
-          ) : (
-            <Skeleton className="size-full rounded-none" />
-          )}
-        </AttachmentMedia>
-        <AttachmentContent>
-          <AttachmentTitle>{file.name}</AttachmentTitle>
-          <AttachmentDescription>{description}</AttachmentDescription>
-        </AttachmentContent>
         {resource && (
           <>
             <AttachmentActions>
@@ -195,59 +274,65 @@ function SentImageCard({
               </AttachmentAction>
             </AttachmentActions>
             <AttachmentTrigger
-              aria-label={`Preview ${file.name}`}
-              title={`Preview ${file.name}`}
-              onClick={preview}
+              aria-label={`Open ${file.name}`}
+              title={`Open ${file.name}`}
+              onClick={open}
             />
           </>
         )}
-      </Attachment>
+      </FileCard>
 
-      <Dialog
-        open={previewUrl !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreviewUrl(null)
-        }}
-      >
-        <DialogContent className="sm:max-w-[min(90vw,72rem)]">
-          <DialogHeader>
-            <DialogTitle className="truncate pr-8">{file.name}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          {previewUrl && (
-            <img
-              src={previewUrl}
-              alt={file.name}
-              className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
-            />
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={download}>
-              <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
-              Download
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {isImage && (
+        <Dialog
+          open={previewUrl !== null}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setPreviewUrl(null)
+          }}
+        >
+          <DialogContent className="sm:max-w-[min(90vw,72rem)]">
+            <DialogHeader>
+              <DialogTitle className="truncate pr-8">{file.name}</DialogTitle>
+              <DialogDescription>{description}</DialogDescription>
+            </DialogHeader>
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt={file.name}
+                className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={download}>
+                <HugeiconsIcon icon={Download01Icon} strokeWidth={2} />
+                Download
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 }
 
-function SentDocCard({ file }: { file: Extract<SentFile, { kind: "doc" }> }) {
+function SentDocCard({ file }: { file: SentDoc }) {
+  const html = file.docKind === "html"
   return (
-    <Attachment className="max-w-64">
-      <AttachmentMedia>
-        <HugeiconsIcon
-          icon={file.docKind === "html" ? SourceCodeIcon : File02Icon}
-          strokeWidth={2}
+    <FileCard
+      media={
+        <FileTile
+          tone={resourceTypeTone(html ? "text/html" : "text/markdown", "")}
+          icon={
+            <HugeiconsIcon
+              icon={html ? SourceCodeIcon : File02Icon}
+              strokeWidth={2}
+            />
+          }
+          label={html ? "html" : "md"}
         />
-      </AttachmentMedia>
-      <AttachmentContent>
-        <AttachmentTitle>{file.name}</AttachmentTitle>
-        <AttachmentDescription>
-          {file.docKind === "html" ? "HTML document" : "Markdown document"}
-        </AttachmentDescription>
-      </AttachmentContent>
+      }
+      title={file.name}
+      description={html ? "HTML document" : "Markdown document"}
+    >
       <AttachmentTrigger asChild>
         <Link
           to={workspaceRecordUrl("docs", file.docId)}
@@ -255,6 +340,6 @@ function SentDocCard({ file }: { file: Extract<SentFile, { kind: "doc" }> }) {
           title={`Open ${file.name}`}
         />
       </AttachmentTrigger>
-    </Attachment>
+    </FileCard>
   )
 }
