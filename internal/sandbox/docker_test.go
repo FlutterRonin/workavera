@@ -66,6 +66,25 @@ func TestDockerSandbox(t *testing.T) {
 		t.Fatalf("unexpected system prompt: %s", prompt)
 	}
 
+	if prompt := m.SystemPrompt(ctx, userID, conv); !strings.Contains(prompt, environmentNotesPath) || strings.Contains(prompt, "Current environment notes") {
+		t.Fatalf("without notes the prompt must carry only the rules: %s", prompt)
+	}
+	if _, err := m.WriteFile(ctx, userID, conv, environmentNotesPath, "- playwright: pip install playwright && playwright install chromium (~/.cache/ms-playwright)\n"); err != nil {
+		t.Fatal(err)
+	}
+	if prompt := m.SystemPrompt(ctx, userID, conv); !strings.Contains(prompt, "Current environment notes") || !strings.Contains(prompt, "playwright install chromium") {
+		t.Fatalf("a running container's notes must reach the prompt: %s", prompt)
+	}
+	if _, err := m.WriteFile(ctx, userID, conv, environmentNotesPath, strings.Repeat("x", maxEnvironmentNotesBytes+100)); err != nil {
+		t.Fatal(err)
+	}
+	if prompt := m.SystemPrompt(ctx, userID, conv); !strings.Contains(prompt, "[Cut at 4 KB.") || strings.Contains(prompt, strings.Repeat("x", maxEnvironmentNotesBytes+1)) {
+		t.Fatal("notes must be cut at 4 KB")
+	}
+	if _, err := m.WriteFile(ctx, userID, conv, environmentNotesPath, "- jq: preinstalled\n"); err != nil {
+		t.Fatal(err)
+	}
+
 	result, err := m.Bash(ctx, userID, conv, "echo \"$PWD $(whoami)\"; echo 中文 >&2; exit 3")
 	if err != nil || result.Status != "completed" || *result.ExitCode != 3 || result.Stdout != dir+" workavera\n" || result.Stderr != "中文\n" {
 		t.Fatalf("unexpected command result: %#v %v", result, err)
@@ -205,8 +224,8 @@ plt.savefig('chart.png')
 	if status, _ := m.Status(ctx, userID); status.Container.State != StateStopped {
 		t.Fatalf("a stopped container must report stopped: %#v", status.Container)
 	}
-	if prompt := m.SystemPrompt(ctx, userID, conv); prompt == "" || inspect("{{.State.Running}}") != "false" {
-		t.Fatal("building the prompt must not start the container")
+	if prompt := m.SystemPrompt(ctx, userID, conv); !strings.Contains(prompt, environmentNotesPath) || strings.Contains(prompt, "Current environment notes") || inspect("{{.State.Running}}") != "false" {
+		t.Fatalf("a stopped container keeps the rules, drops the notes, and stays stopped: %s", prompt)
 	}
 	if result, err := m.Bash(ctx, userID, conv, "ls notes"); err != nil || result.Stdout != "plan.md\n" {
 		t.Fatalf("a tool call must start a stopped container: %#v %v", result, err)

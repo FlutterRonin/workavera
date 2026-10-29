@@ -44,7 +44,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
   their own, `workavera-<user ID>`, whose `/workspace` lives in a named volume
   and persists across conversations. Each conversation works in its own
   folder, `/workspace/chats/<conversation ID>`, so files from different
-  conversations do not pile up, while the rest of `/workspace` stays reachable. In Chat the assistant runs commands with
+  conversations do not pile up, while the rest of `/workspace` stays reachable.
+  Software the assistant installs is recorded in shared environment notes at
+  `/workspace/.workavera/environment.md`, which later conversations read
+  before installing and see in their system prompt while the container runs. In Chat the assistant runs commands with
   `sandbox_bash` — anything still running after 30 seconds continues in the
   background and can be followed and stopped later, and stopping a Chat run
   terminates a command still in the foreground — and reads, writes, and edits

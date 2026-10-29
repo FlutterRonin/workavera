@@ -88,6 +88,7 @@ func (d *docker) script(ctx context.Context, container string, stdin io.Reader, 
 }
 
 type containerInfo struct {
+	Name     string
 	Exists   bool
 	Running  bool
 	Image    string
@@ -121,6 +122,7 @@ func (d *docker) inspectContainer(ctx context.Context, name string) (containerIn
 		return containerInfo{}, err
 	}
 	info := containerInfo{
+		Name:    name,
 		Exists:  true,
 		Running: raw.State.Running,
 		Image:   raw.Config.Image,
