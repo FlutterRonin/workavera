@@ -120,14 +120,14 @@ Workavera 原生开源的 Android 和 iOS 客户端已经正式上线。它们�
 | ✅ | Calendar 日历 | 0.0.1 | [中文](./doc/calendar-prd.zh-CN.md) · [English](./doc/calendar-prd.md) |
 | ✅ | Chat 对话 | 0.0.1 | [中文](./doc/chat-fantasy-plan.zh-CN.md) · [English](./doc/chat-fantasy-plan.md) |
 | ✅ | Docs 文档 | 0.0.1 | [中文](./doc/docs-prd.zh-CN.md) · [English](./doc/docs-prd.md) |
-| ✅ | Reading 稍后读 | 0.0.1 | — |
-| ✅ | Contacts 通讯录 | 0.0.1 | — |
-| ✅ | 供 Claude Code、Cursor 等客户端接入的 MCP | 0.0.7 | — |
+| ✅ | Reading 稍后读 | 0.0.1 | [中文](./doc/reading-prd.zh-CN.md) · [English](./doc/reading-prd.md) |
+| ✅ | Contacts 通讯录 | 0.0.1 | [中文](./doc/contacts-prd.zh-CN.md) · [English](./doc/contacts-prd.md) |
+| ✅ | 供 Claude Code、Cursor 等客户端接入的 MCP | 0.0.7 | [中文](./doc/mcp-server-prd.zh-CN.md) · [English](./doc/mcp-server-prd.md) |
 | ✅ | Chat 长期记忆 | 0.0.8 | [中文](./doc/chat-memory-prd.zh-CN.md) · [English](./doc/chat-memory-prd.md) |
 | ✅ | 在 Chat 中接入自己的 MCP 服务 | 0.0.9 | [中文](./doc/mcp-client-prd.zh-CN.md) · [English](./doc/mcp-client-prd.md) |
-| ✅ | 文档公开链接 | 0.1.0 | — |
+| ✅ | 文档公开链接 | 0.1.0 | [中文](./doc/docs-public-links-prd.zh-CN.md) · [English](./doc/docs-public-links-prd.md) |
 | ✅ | 项目公开时间线 | 0.1.1 | [中文](./doc/board-public-preview-prd.zh-CN.md) · [English](./doc/board-public-preview-prd.md) |
-| ✅ | Discover 订阅发现与 AI 总结 | 0.1.1 | — |
+| ✅ | Discover 订阅发现与 AI 总结 | 0.1.1 | [中文](./doc/discover-prd.zh-CN.md) · [English](./doc/discover-prd.md) |
 | ✅ | Resources 资源管理 | 0.2.0 | [中文](./doc/resources-prd.zh-CN.md) · [English](./doc/resources-prd.md) |
 | ✅ | 沙箱 | 0.2.0 | [中文](./doc/sandbox-prd.zh-CN.md) · [English](./doc/sandbox-prd.md) |
 | ⬜ | 定时任务 | 计划中 | [中文](./doc/scheduled-tasks-prd.zh-CN.md) · [English](./doc/scheduled-tasks-prd.md)（待审核，已过时） |

@@ -2,7 +2,7 @@
 
 [English](./docs-prd.md)
 
-> 实现状态：当前 Workavera `0.0.2` 工作区行为，更新于 2026-07-18。
+> 实现状态：当前 Workavera `0.0.2` 工作区行为，更新于 2026-07-18。`0.1.0` 新增的文档公开链接另见其 [PRD](./docs-public-links-prd.zh-CN.md)。
 
 ## 1. 产品目的
 

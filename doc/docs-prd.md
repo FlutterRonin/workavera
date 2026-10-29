@@ -2,7 +2,7 @@
 
 [简体中文](./docs-prd.zh-CN.md)
 
-> Implementation status: current Workavera `0.0.2` workspace behavior, updated 2026-07-18.
+> Implementation status: current Workavera `0.0.2` workspace behavior, updated 2026-07-18. Public document links, added in `0.1.0`, have their own [PRD](./docs-public-links-prd.md).
 
 ## 1. Purpose
 
