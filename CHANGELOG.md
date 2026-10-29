@@ -7,6 +7,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
 ### Added
 
 - Resources is a personal library for uploaded files at `/resources`. A PDF,
@@ -17,10 +19,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
   reason. Files are listed 20 to a page, can be searched by name and filtered
   by type (PDF, documents, spreadsheets, presentations, images, code and data,
   or archives), and can be opened, downloaded, renamed, and deleted, and their
-  extracted text can be viewed. In Chat, the
-  `+` button or dropping a file uploads it right away, and typing `#` picks an
-  existing resource; a message can carry up to six files, with or without
-  text. The assistant sees what was attached without the content and reads or
+  extracted text can be viewed. In Chat, the `+` button or dropping a file
+  uploads it right away, and typing `#` picks an existing resource; a message
+  can carry up to six files, with or without text. The assistant sees what was attached without the content and reads or
   searches the extracted text through new `resources_list`,
   `resources_search`, and `resources_read_markdown` tools, which the MCP
   server offers as well. On request, and only after approval, it can create a
@@ -81,6 +82,40 @@ and versions follow [Semantic Versioning](https://semver.org/).
   and is refused when Workavera itself runs in a container; the tools exist in
   Chat only, never through the MCP server or API keys.
 
+### Changed
+
+- A Chat response can now take up to 80 steps instead of 12, which longer
+  tool work such as sandbox tasks needs. Superusers can change the limit, from
+  2 to 500, through the `chat.max_steps` record in `configs`, which is checked
+  on save and applies from the next response. The last step cannot call tools, so a
+  response that reaches the limit still ends by telling the user what was
+  done, what is left, and where the results are, instead of stopping after a
+  tool call. A running tool card now shows a spinner rather than a clock.
+- PocketBase is updated from 0.39.10 to 0.40.6, which moves JSON handling onto
+  `encoding/json/v2`, enables SQLite's defensive mode, backs up the database
+  without holding a transaction lock, and caps the source size of generated
+  thumbnails. Building from source now requires Go 1.27.2, and the Docker
+  image builds with it.
+- Fantasy is updated from 0.41.2 to 0.45.5. Streamed tool calls are repaired
+  and dispatched only once the model has finished its turn, so a truncated or
+  filtered response no longer runs a tool on half-written input, and a tool
+  that fails now reports its error back to the model instead of ending the
+  run.
+
+### Fixed
+
+- A deactivated account's API keys no longer work. Deactivation already blocked
+  sign-in and ended sessions, but `/api/mcp` still accepted the account's keys,
+  so an MCP client could keep acting as it; such keys are now rejected.
+- A page left open while the server was upgraded no longer fails to open other
+  parts of the app with a module-loading error. It now reloads once onto the
+  new version, and the server answers requests for build files that no longer
+  exist with a 404 instead of the app's HTML page.
+
+## [0.1.1] - 2026-09-04
+
+### Added
+
 - Reading has a discovery panel behind the sparkle button in its sidebar. It
   keeps a list of subscriptions the user owns, either an RSS or Atom feed of
   their own — a site, a newsletter, or a repository's `releases.atom` — or
@@ -116,39 +151,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- A Chat response can now take up to 80 steps instead of 12, which longer
-  tool work such as sandbox tasks needs. Superusers can change the limit, from
-  2 to 500, through the `chat.max_steps` record in `configs`, which is checked
-  on save and applies from the next response. The last step cannot call tools, so a
-  response that reaches the limit still ends by telling the user what was
-  done, what is left, and where the results are, instead of stopping after a
-  tool call. A running tool card now shows a spinner rather than a clock.
 - The document share dialog can open the shared link in a new tab instead of
   only copying it.
 - Tasks carry an optional start date alongside their due date, so a task is a
   span rather than a single deadline. The board task form, the Board API, and
   the `board_create_task` and `board_update_task` assistant tools all accept it,
   and a start date after the due date is refused.
-- PocketBase is updated from 0.39.10 to 0.40.6, which moves JSON handling onto
-  `encoding/json/v2`, enables SQLite's defensive mode, backs up the database
-  without holding a transaction lock, and caps the source size of generated
-  thumbnails. Building from source now requires Go 1.27.2, and the Docker
-  image builds with it.
-- Fantasy is updated from 0.41.2 to 0.45.5. Streamed tool calls are repaired
-  and dispatched only once the model has finished its turn, so a truncated or
-  filtered response no longer runs a tool on half-written input, and a tool
-  that fails now reports its error back to the model instead of ending the
-  run.
 
 ### Fixed
 
-- A deactivated account's API keys no longer work. Deactivation already blocked
-  sign-in and ended sessions, but `/api/mcp` still accepted the account's keys,
-  so an MCP client could keep acting as it; such keys are now rejected.
-- A page left open while the server was upgraded no longer fails to open other
-  parts of the app with a module-loading error. It now reloads once onto the
-  new version, and the server answers requests for build files that no longer
-  exist with a 404 instead of the app's HTML page.
 - Picking a different item in the reading list works again. The selection was
   being restored from the address bar a moment after the click and snapped back
   to the item that was open before, which left the list stuck on one entry as
@@ -610,7 +621,9 @@ First public release.
 - **AI Micro Apps** for self-contained HTML tools with sandboxed preview.
 - **Dashboard**, realtime **Notifications**, and **Settings** with per-user model configurations and model sharing.
 
-[Unreleased]: https://github.com/xusenlin/workavera/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/xusenlin/workavera/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/xusenlin/workavera/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/xusenlin/workavera/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/xusenlin/workavera/compare/v0.0.11...v0.1.0
 [0.0.11]: https://github.com/xusenlin/workavera/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/xusenlin/workavera/compare/v0.0.9...v0.0.10
