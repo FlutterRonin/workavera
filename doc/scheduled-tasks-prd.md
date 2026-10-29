@@ -2,7 +2,7 @@
 
 [简体中文](./scheduled-tasks-prd.zh-CN.md)
 
-> Product baseline: Workavera `0.0.9`. Status: **proposal, pending review**.
+> Product baseline: Workavera `0.0.9`. Status: **proposal, pending review, outdated**—written against `0.0.9` and not yet revised for Resources and the sandbox in `0.2.0`.
 
 ## 1. Purpose
 

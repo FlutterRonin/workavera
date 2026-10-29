@@ -114,7 +114,7 @@ The apps need a server at least as new as the table below; upgrade the server fi
 
 The [self-hosting guide](./doc/self-hosting.md) covers installation, first-run setup, privacy and local models, the sandbox, and building from source.
 
-The roadmap below lists each feature with the server version that first shipped it: ✅ done, ⬜ not started yet. A proposal whose product document is marked pending review is open for feedback before work begins.
+The roadmap below lists each feature with the server version that first shipped it: ✅ done, ⬜ not started yet. A proposal whose product document is marked pending review is open for feedback before work begins; one marked outdated was written against an earlier version and will be revised first.
 
 | | Feature | Version | Product docs |
 | --- | --- | --- | --- |
@@ -132,7 +132,7 @@ The roadmap below lists each feature with the server version that first shipped 
 | ✅ | Discover subscriptions and AI summaries | 0.1.1 | — |
 | ✅ | Resources | 0.2.0 | [PRD](./doc/resources-prd.md) · [中文](./doc/resources-prd.zh-CN.md) |
 | ✅ | Sandbox | 0.2.0 | [PRD](./doc/sandbox-prd.md) · [中文](./doc/sandbox-prd.zh-CN.md) |
-| ⬜ | Scheduled tasks | Planned | [PRD](./doc/scheduled-tasks-prd.md) · [中文](./doc/scheduled-tasks-prd.zh-CN.md) — pending review |
+| ⬜ | Scheduled tasks | Planned | [PRD](./doc/scheduled-tasks-prd.md) · [中文](./doc/scheduled-tasks-prd.zh-CN.md) — pending review, outdated |
 
 ## Changelog
 

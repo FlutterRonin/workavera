@@ -2,7 +2,7 @@
 
 [English](./scheduled-tasks-prd.md)
 
-> 产品基线：Workavera `0.0.9`。状态：**提案，待评审**。
+> 产品基线：Workavera `0.0.9`。状态：**提案，待审核，已过时**——基于 `0.0.9` 撰写，尚未根据 `0.2.0` 的 Resources 和沙箱修订。
 
 ## 1. 目的
 

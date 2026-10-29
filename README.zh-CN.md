@@ -112,7 +112,7 @@ Workavera 原生开源的 Android 和 iOS 客户端已经正式上线。它们�
 
 [自托管指南](./doc/self-hosting.zh-CN.md)介绍安装、首次运行、隐私与本地模型、沙箱，以及从源码构建。
 
-下面的路线图列出每项功能首次上线的服务端版本：✅ 已完成，⬜ 尚未开始。产品文档标为“待审核”的提案正在征求意见，审核通过后才会开始开发。
+下面的路线图列出每项功能首次上线的服务端版本：✅ 已完成，⬜ 尚未开始。产品文档标为“待审核”的提案正在征求意见，审核通过后才会开始开发；标为“已过时”的提案基于较早的版本撰写，会先修订再审核。
 
 | | 功能 | 版本 | 产品文档 |
 | --- | --- | --- | --- |
@@ -130,7 +130,7 @@ Workavera 原生开源的 Android 和 iOS 客户端已经正式上线。它们�
 | ✅ | Discover 订阅发现与 AI 总结 | 0.1.1 | — |
 | ✅ | Resources 资源管理 | 0.2.0 | [中文](./doc/resources-prd.zh-CN.md) · [English](./doc/resources-prd.md) |
 | ✅ | 沙箱 | 0.2.0 | [中文](./doc/sandbox-prd.zh-CN.md) · [English](./doc/sandbox-prd.md) |
-| ⬜ | 定时任务 | 计划中 | [中文](./doc/scheduled-tasks-prd.zh-CN.md) · [English](./doc/scheduled-tasks-prd.md)（待审核） |
+| ⬜ | 定时任务 | 计划中 | [中文](./doc/scheduled-tasks-prd.zh-CN.md) · [English](./doc/scheduled-tasks-prd.md)（待审核，已过时） |
 
 ## 更新日志
 
